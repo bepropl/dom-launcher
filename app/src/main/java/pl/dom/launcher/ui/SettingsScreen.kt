@@ -16,7 +16,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import android.content.Intent
+import android.provider.Settings
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import pl.dom.launcher.service.HomeOverrideService
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -99,10 +104,22 @@ fun SettingsScreen(settings: LauncherSettings?) {
         }
 
         Section {
-            Text("Przycisk Home i inne przyciski pilota", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
+            Text("Dom jako ekran główny", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
+            val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+            val overrideOn = remember(lifecycleState) { HomeOverrideService.isEnabled(context) }
             Text(
-                "Ustaw je w aplikacji Button Mapper: Home → „Otwórz aplikację” → Dom. Tak samo możesz przypisać przycisk Crunchyroll.",
-                fontSize = 10.sp, color = Palette.Soft,
+                if (overrideOn) "Włączone ✓ Przycisk Home i włączenie telewizora otwierają Dom."
+                else "Włącz usługę „Dom – ekran główny” w Ułatwieniach dostępu. Wtedy Home i włączenie telewizora zawsze otworzą Dom (jak „Override” w Projectivy).",
+                fontSize = 10.sp, color = if (overrideOn) Palette.Ok else Palette.Soft,
+            )
+            Button(onClick = {
+                runCatching {
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }) { Text("Otwórz Ułatwienia dostępu", fontSize = 11.sp) }
+            Text(
+                "Jeśli Play Protect zablokuje instalację, wyłącz w Sklepie Play: profil → Play Protect → zębatka → „Skanuj aplikacje”. Przy włączonej usłudze usuń w Button Mapperze przypisanie Home.",
+                fontSize = 9.sp, color = Palette.Muted,
             )
         }
 

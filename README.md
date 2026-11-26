@@ -6,7 +6,7 @@ Własny ekran główny dla telewizora Sony Bravia z Google TV.
 
 - Ekran **Start**: zegar i data, menu (Start / Do obejrzenia / Filmy / Seriale / Aplikacje), dolny rząd ulubionych aplikacji z **oficjalnymi banerami** pobranymi z telewizora.
 - Zakładka **Aplikacje**: wszystkie aplikacje. OK uruchamia aplikację, a **przytrzymanie OK** dodaje ją do ekranu Start albo z niego usuwa.
-- **Przycisk Home** i inne przyciski pilota ustawiasz w aplikacji **Button Mapper** (launcher nie używa ułatwień dostępu, więc Play Protect go nie blokuje).
+- **Dom jako ekran główny**: usługa ułatwień dostępu przejmuje przycisk Home i ekran po włączeniu telewizora (szczegóły w punkcie 3).
 - **Ochrona OLED**: interfejs przesuwa się co kilka minut o kilka pikseli. Po 5 minutach bez pilota (do zmiany) zostaje tylko mały zegar, który też się przesuwa.
 - **Konfiguracja z telefonu**: Ustawienia (zębatka w prawym górnym rogu) pokazują kod QR i PIN. Na telefonie ustawisz kolejność aplikacji, czas spoczynku oraz adresy i klucze Home Assistanta, Emby i TMDB, serwisy streamingowe oraz obserwowane seriale. Klucze są szyfrowane na telewizorze kluczem z Android Keystore.
 
@@ -41,9 +41,15 @@ Każda zmiana w repozytorium jest automatycznie budowana przez GitHub Actions i 
 
 ## 3. Przycisk Home i przyciski pilota
 
-Launcher celowo **nie** używa usługi ułatwień dostępu. Google Play Protect blokuje instalację spoza Sklepu aplikacji, które z niej korzystają.
+Dom ma usługę ułatwień dostępu **„Dom – ekran główny”** (działa jak „Override” w Projectivy):
+- przycisk Home otwiera Dom,
+- gdy po włączeniu telewizora pojawi się ekran Google TV, Dom od razu go przykrywa.
 
-Przycisk Home ustaw w aplikacji **Button Mapper** (ze Sklepu Google Play): przycisk Home → „Otwórz aplikację” → **Dom**. Tak samo możesz przypisać np. przycisk Crunchyroll.
+Usługa nie czyta zawartości ekranu – dostaje tylko informację, że na wierzch wyszedł launcher Google.
+
+1. Google Play Protect blokuje instalację spoza Sklepu aplikacji z taką usługą. Wyłącz skanowanie: Sklep Play → profil → Play Protect → zębatka → „Skanuj aplikacje za pomocą Play Protect”.
+2. Zainstaluj Dom, potem Ustawienia Dom → „Otwórz Ułatwienia dostępu” → „Dom – ekran główny” → Włącz.
+3. Jeśli wcześniej Home był przypisany w Button Mapperze, usuń to przypisanie (inne przyciski, np. Crunchyroll, możesz tam zostawić).
 
 **Nie wyłączaj** fabrycznego launchera Google (`com.google.android.apps.tv.launcherx`). U części osób kończyło się to pętlą restartów.
 

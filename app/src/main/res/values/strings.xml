@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Dom</string>
+    <string name="a11y_label">Dom – ekran główny</string>
+    <string name="a11y_description">Przycisk Home na pilocie otwiera Dom, a gdy po włączeniu telewizora pojawi się ekran Google TV, Dom od razu go przykrywa. Usługa nie czyta zawartości ekranu.</string>
 </resources>
