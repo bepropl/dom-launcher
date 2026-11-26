@@ -12,8 +12,11 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "launcher")
 
-/** Co ma się stać po wciśnięciu przypisanego przycisku pilota (np. Crunchyroll). */
-enum class RemapAction { NONE, OPEN_LAUNCHER, OPEN_APP }
+/** Jakość domku na ekranie głównym. */
+enum class HouseMode { FULL, ECO, OFF }
+
+/** Serwis streamingowy z TMDB (np. Netflix = 8), wybrany na stronie w telefonie. */
+data class StreamingProvider(val id: Int, val name: String)
 
 /** Zwykłe (niesekretne) ustawienia launchera. Klucze i tokeny trzyma [SecretStore]. */
 data class LauncherSettings(
@@ -21,11 +24,11 @@ data class LauncherSettings(
     val favorites: List<String>,
     /** Po ilu minutach bez pilota włącza się tryb spoczynku (0 = nigdy). */
     val idleMinutes: Int,
-    val remapKeyCode: Int,
-    val remapAction: RemapAction,
-    val remapPackage: String,
     val haUrl: String,
     val embyUrl: String,
+    val houseMode: HouseMode,
+    /** Serwisy, które macie – Filmy i Seriale pokazują tylko to, co jest w nich dostępne. */
+    val providers: List<StreamingProvider>,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -33,11 +36,10 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val favorites = stringPreferencesKey("favorites")
         val idleMinutes = intPreferencesKey("idle_minutes")
-        val remapKeyCode = intPreferencesKey("remap_key_code")
-        val remapAction = stringPreferencesKey("remap_action")
-        val remapPackage = stringPreferencesKey("remap_package")
         val haUrl = stringPreferencesKey("ha_url")
         val embyUrl = stringPreferencesKey("emby_url")
+        val houseMode = stringPreferencesKey("house_mode")
+        val providers = stringPreferencesKey("providers")
     }
 
     val flow: Flow<LauncherSettings> = context.dataStore.data.map { it.toSettings() }
@@ -52,24 +54,26 @@ class SettingsRepository(private val context: Context) {
         it[Keys.idleMinutes] = minutes.coerceIn(0, 240)
     }
 
-    suspend fun setRemap(keyCode: Int, action: RemapAction, packageName: String) = context.dataStore.edit {
-        it[Keys.remapKeyCode] = keyCode
-        it[Keys.remapAction] = action.name
-        it[Keys.remapPackage] = packageName
-    }
-
     suspend fun setHaUrl(url: String) = context.dataStore.edit { it[Keys.haUrl] = url.trim().trimEnd('/') }
 
     suspend fun setEmbyUrl(url: String) = context.dataStore.edit { it[Keys.embyUrl] = url.trim().trimEnd('/') }
 
+    suspend fun setHouseMode(mode: HouseMode) = context.dataStore.edit { it[Keys.houseMode] = mode.name }
+
+    /** Zapis jako „8:Netflix|337:Disney Plus”. */
+    suspend fun setProviders(providers: List<StreamingProvider>) = context.dataStore.edit { prefs ->
+        prefs[Keys.providers] = providers.joinToString("|") { "${it.id}:${it.name.replace("|", " ")}" }
+    }
+
     private fun Preferences.toSettings() = LauncherSettings(
         favorites = this[Keys.favorites].orEmpty().split(',').filter { it.isNotBlank() },
         idleMinutes = this[Keys.idleMinutes] ?: 5,
-        remapKeyCode = this[Keys.remapKeyCode] ?: -1,
-        remapAction = runCatching { RemapAction.valueOf(this[Keys.remapAction] ?: "NONE") }
-            .getOrDefault(RemapAction.NONE),
-        remapPackage = this[Keys.remapPackage].orEmpty(),
         haUrl = this[Keys.haUrl].orEmpty(),
         embyUrl = this[Keys.embyUrl].orEmpty(),
+        houseMode = runCatching { HouseMode.valueOf(this[Keys.houseMode] ?: "FULL") }.getOrDefault(HouseMode.FULL),
+        providers = this[Keys.providers].orEmpty().split('|').mapNotNull { entry ->
+            val id = entry.substringBefore(':').toIntOrNull() ?: return@mapNotNull null
+            StreamingProvider(id, entry.substringAfter(':'))
+        },
     )
 }

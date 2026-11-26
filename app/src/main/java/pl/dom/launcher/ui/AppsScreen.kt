@@ -13,6 +13,11 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,7 +31,19 @@ fun AppsScreen(
     favoritePackages: Set<String>,
     onLaunch: (TvApp) -> Unit,
     onToggleFavorite: (TvApp) -> Unit,
+    focusFirstApp: Boolean = false,
+    onFirstAppFocused: () -> Unit = {},
 ) {
+    val firstApp = remember { FocusRequester() }
+    // Po wejściu kafelkiem „Wszystkie” fokus przechodzi od razu na pierwszą aplikację.
+    LaunchedEffect(focusFirstApp, apps.isNotEmpty()) {
+        if (focusFirstApp && apps.isNotEmpty()) {
+            delay(100)
+            runCatching { firstApp.requestFocus() }
+            onFirstAppFocused()
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
         Text(
             "OK – uruchom · przytrzymaj OK – dodaj do ekranu Start lub usuń · kolejność ustawisz z telefonu",
@@ -43,7 +60,10 @@ fun AppsScreen(
             items(apps, key = { it.packageName }) { app ->
                 AppCard(
                     app = app,
-                    modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(16f / 9f)
+                        .then(if (app.packageName == apps.firstOrNull()?.packageName) Modifier.focusRequester(firstApp) else Modifier),
                     isFavorite = app.packageName in favoritePackages,
                     onClick = { onLaunch(app) },
                     onLongClick = { onToggleFavorite(app) },

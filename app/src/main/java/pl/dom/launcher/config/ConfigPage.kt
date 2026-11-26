@@ -34,6 +34,20 @@ internal const val CONFIG_PAGE = """<!doctype html>
   .bar .inner { max-width: 640px; margin: 0 auto; display: flex; gap: 12px; align-items: center; }
   #msg { flex: 1; font-size: 14px; color: #D9C7AE; }
   .hidden { display: none; }
+  .checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .checks label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); color: #F4EBDD; font-size: 15px; }
+  .checks input { width: auto; margin: 0; }
+  ul.media li { align-items: flex-start; gap: 10px; padding: 10px 0; flex-wrap: wrap; }
+  ul.media img, ul.media .noimg { width: 46px; height: 69px; object-fit: cover; border-radius: 6px; background: #241c15; flex: none; }
+  ul.media .info { flex: 1; min-width: 160px; }
+  ul.media .title { font-weight: 500; }
+  ul.media .meta { color: #B9A68C; font-size: 13px; }
+  ul.media .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  ul.media .acts input { width: 64px; padding: 8px; }
+  ul.media button { min-height: 40px; font-size: 14px; }
+  .row.wrap { flex-wrap: wrap; }
+  .filebtn { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; margin: 0; border-radius: 10px; border: 1px solid rgba(242,166,90,.45); color: #F4EBDD; font-size: 15px; cursor: pointer; }
+  .filebtn input { display: none; }
 </style>
 </head>
 <body>
@@ -62,21 +76,6 @@ internal const val CONFIG_PAGE = """<!doctype html>
     </section>
 
     <section>
-      <h2>Przycisk pilota</h2>
-      <p class="hint" id="remapInfo"></p>
-      <label for="remapAction">Co ma robić</label>
-      <select id="remapAction">
-        <option value="NONE">Nic (działa jak zwykle)</option>
-        <option value="OPEN_LAUNCHER">Otwiera launcher</option>
-        <option value="OPEN_APP">Otwiera aplikację…</option>
-      </select>
-      <div id="remapAppBox" class="hidden">
-        <label for="remapApp">Aplikacja</label>
-        <select id="remapApp"></select>
-      </div>
-    </section>
-
-    <section>
       <h2>Ochrona ekranu OLED</h2>
       <label for="idle">Tryb spoczynku po (minutach, 0 = nigdy)</label>
       <input id="idle" type="number" min="0" max="240" inputmode="numeric">
@@ -99,14 +98,47 @@ internal const val CONFIG_PAGE = """<!doctype html>
     </section>
 
     <section>
-      <h2>TMDB i Trakt</h2>
-      <label for="s_tmdb_key">TMDB – klucz API <span class="saved" id="has_tmdb_key"></span></label>
+      <h2>TMDB (seriale i filmy)</h2>
+      <label for="s_tmdb_key">Klucz API (v3) albo token odczytu (v4) <span class="saved" id="has_tmdb_key"></span></label>
       <input id="s_tmdb_key" type="password" autocomplete="off" placeholder="Puste = bez zmian, „-” = usuń">
-      <label for="s_trakt_client_id">Trakt – Client ID <span class="saved" id="has_trakt_client_id"></span></label>
-      <input id="s_trakt_client_id" type="password" autocomplete="off" placeholder="Puste = bez zmian, „-” = usuń">
-      <label for="s_trakt_client_secret">Trakt – Client Secret <span class="saved" id="has_trakt_client_secret"></span></label>
-      <input id="s_trakt_client_secret" type="password" autocomplete="off" placeholder="Puste = bez zmian, „-” = usuń">
-      <p class="hint">Połączenie z kontem Trakt (kod do zatwierdzenia) dojdzie w etapie 4.</p>
+      <p class="hint">Darmowy klucz: themoviedb.org → Ustawienia → API. Po wpisaniu kliknij Zapisz na dole.</p>
+    </section>
+
+    <section>
+      <h2>Wasze serwisy streamingowe</h2>
+      <p class="hint" id="provMsg">Wczytuję…</p>
+      <div id="provList" class="checks"></div>
+    </section>
+
+    <section>
+      <h2>Szukaj serialu lub filmu</h2>
+      <div class="row">
+        <input id="q" type="search" placeholder="np. The Last of Us" autocomplete="off" aria-label="Tytuł">
+        <button type="button" id="qBtn">Szukaj</button>
+      </div>
+      <p class="hint" id="qMsg"></p>
+      <ul id="results" class="media"></ul>
+    </section>
+
+    <section>
+      <h2>Obserwowane seriale</h2>
+      <p class="hint">„Obejrzane do” to ostatni odcinek, który już widzieliście. S0 E0 = zaczynacie od początku.</p>
+      <ul id="shows" class="media"></ul>
+    </section>
+
+    <section>
+      <h2>Lista do obejrzenia</h2>
+      <ul id="watchlist" class="media"></ul>
+    </section>
+
+    <section>
+      <h2>Kopia zapasowa</h2>
+      <p class="hint">Obserwowane seriale i lista do obejrzenia w jednym pliku.</p>
+      <div class="row wrap">
+        <button type="button" id="exportBtn">Pobierz kopię</button>
+        <label class="filebtn">Wczytaj kopię<input id="importFile" type="file" accept="application/json,.json"></label>
+      </div>
+      <p class="hint" id="backupMsg"></p>
     </section>
   </div>
 </main>
@@ -118,7 +150,7 @@ internal const val CONFIG_PAGE = """<!doctype html>
 
 <script>
 (function () {
-  var SECRETS = ["ha_token", "emby_key", "tmdb_key", "trakt_client_id", "trakt_client_secret"];
+  var SECRETS = ["ha_token", "emby_key", "tmdb_key"];
   var pin = "";
   var apps = [];
   var favorites = [];
@@ -165,14 +197,133 @@ internal const val CONFIG_PAGE = """<!doctype html>
       add.appendChild(o);
     });
   }
-  function fillAppSelect(select, selected) {
-    select.textContent = "";
-    apps.forEach(function (a) {
-      var o = document.createElement("option");
-      o.value = a.pkg; o.textContent = a.label;
-      if (a.pkg === selected) o.selected = true;
-      select.appendChild(o);
+  function node(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = text;
+    return n;
+  }
+  function act(text, onClick) {
+    var b = node("button", "", text);
+    b.type = "button";
+    b.onclick = function () { b.disabled = true; Promise.resolve(onClick()).then(function () { b.disabled = false; }, function () { b.disabled = false; }); };
+    return b;
+  }
+  function mediaRow(poster, title, meta) {
+    var li = node("li");
+    if (poster) { var img = node("img"); img.src = poster; img.alt = ""; img.loading = "lazy"; li.appendChild(img); }
+    else li.appendChild(node("div", "noimg"));
+    var info = node("div", "info");
+    info.appendChild(node("div", "title", title));
+    if (meta) info.appendChild(node("div", "meta", meta));
+    var acts = node("div", "acts");
+    info.appendChild(acts);
+    li.appendChild(info);
+    return { li: li, acts: acts };
+  }
+  function libraryAction(payload, msgEl, okText) {
+    if (msgEl) msgEl.textContent = "Chwila…";
+    return api("/api/library", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify(payload) })
+      .then(function (lib) { renderLibrary(lib); if (msgEl) msgEl.textContent = okText || "Zapisano ✓"; if (lastQuery) search(lastQuery, true); })
+      .catch(function (e) { if (msgEl) msgEl.textContent = e.message; });
+  }
+  function showStatus(s) {
+    var parts = [];
+    if (s.provider) parts.push(s.provider);
+    if (s.unwatched > 0 && s.next) parts.push("dalej " + s.next.code + " (" + s.unwatched + " do obejrzenia)");
+    else if (s.nextAir) parts.push("następny " + s.nextAir.code + (s.nextAir.date ? " – " + s.nextAir.date : ""));
+    else if (s.ended) parts.push("zakończony");
+    else parts.push("na bieżąco");
+    return parts.join(" · ");
+  }
+  function renderLibrary(lib) {
+    var shows = el("shows");
+    shows.textContent = "";
+    if (!lib.shows.length) shows.appendChild(node("li", "meta", "Jeszcze nic. Wyszukaj serial powyżej i kliknij Obserwuj."));
+    lib.shows.forEach(function (s) {
+      var r = mediaRow(s.poster, s.name, showStatus(s));
+      var msg = node("div", "meta");
+      r.acts.appendChild(node("span", "meta", "Obejrzane do S"));
+      var se = node("input"); se.type = "number"; se.min = "0"; se.inputMode = "numeric"; se.value = s.watched.s; se.setAttribute("aria-label", "Sezon");
+      r.acts.appendChild(se);
+      r.acts.appendChild(node("span", "meta", "E"));
+      var ep = node("input"); ep.type = "number"; ep.min = "0"; ep.inputMode = "numeric"; ep.value = s.watched.e; ep.setAttribute("aria-label", "Odcinek");
+      r.acts.appendChild(ep);
+      r.acts.appendChild(act("Zapisz", function () {
+        return libraryAction({ action: "watched", id: s.id, s: parseInt(se.value || "0", 10), e: parseInt(ep.value || "0", 10) }, msg);
+      }));
+      if (s.unwatched > 0 && s.next) r.acts.appendChild(act("Obejrzany " + s.next.code, function () { return libraryAction({ action: "next", id: s.id }, msg); }));
+      r.acts.appendChild(act("Usuń", function () {
+        if (!confirm("Przestać obserwować „" + s.name + "”?")) return;
+        return libraryAction({ action: "unfollow", id: s.id }, msg, "Usunięto");
+      }));
+      r.li.querySelector(".info").appendChild(msg);
+      shows.appendChild(r.li);
     });
+    var wl = el("watchlist");
+    wl.textContent = "";
+    if (!lib.watchlist.length) wl.appendChild(node("li", "meta", "Pusta. Dodasz tu filmy i seriale z wyszukiwarki albo z telewizora."));
+    lib.watchlist.forEach(function (w) {
+      var r = mediaRow(w.poster, w.title, (w.type === "MOVIE" ? "Film" : "Serial") + (w.provider ? " · " + w.provider : ""));
+      r.acts.appendChild(act("Usuń z listy", function () { return libraryAction({ action: "unlist", id: w.id, type: w.type }, null); }));
+      wl.appendChild(r.li);
+    });
+  }
+  var lastQuery = "";
+  function search(q, quiet) {
+    lastQuery = q;
+    if (!quiet) el("qMsg").textContent = "Szukam…";
+    return api("/api/search", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({ q: q }) })
+      .then(function (res) {
+        var list = el("results");
+        list.textContent = "";
+        if (res.error) { el("qMsg").textContent = res.error; return; }
+        if (!quiet) el("qMsg").textContent = res.results.length ? "" : "Nic nie znalazłem.";
+        res.results.forEach(function (it) {
+          var r = mediaRow(it.poster, it.title, (it.type === "MOVIE" ? "Film" : "Serial") + (it.year ? " · " + it.year : ""));
+          var msg = node("div", "meta");
+          if (it.type === "TV") {
+            if (it.followed) r.acts.appendChild(node("span", "saved", "Obserwujecie ✓"));
+            else {
+              r.acts.appendChild(act("Obserwuj – jesteśmy na bieżąco", function () { return libraryAction({ action: "follow", id: it.id, caughtUp: true }, msg, "Obserwujecie ✓"); }));
+              r.acts.appendChild(act("Obserwuj – od początku", function () { return libraryAction({ action: "follow", id: it.id, caughtUp: false }, msg, "Obserwujecie ✓"); }));
+            }
+          }
+          if (it.onList) r.acts.appendChild(node("span", "saved", "Na liście ✓"));
+          else if (!it.followed) r.acts.appendChild(act("Do obejrzenia", function () { return libraryAction({ action: "list", id: it.id, type: it.type }, msg, "Dodano ✓"); }));
+          r.li.querySelector(".info").appendChild(msg);
+          list.appendChild(r.li);
+        });
+      })
+      .catch(function (e) { el("qMsg").textContent = e.message; });
+  }
+  function loadProviders() {
+    el("provMsg").textContent = "Wczytuję…";
+    api("/api/providers").then(function (p) {
+      var box = el("provList");
+      box.textContent = "";
+      el("provMsg").textContent = p.error || "Zaznacz serwisy, które macie. Z nich będą polecane filmy i seriale.";
+      p.all.forEach(function (prov) {
+        var lab = node("label");
+        var cb = node("input"); cb.type = "checkbox"; cb.value = prov.id; cb.checked = p.selected.indexOf(prov.id) >= 0;
+        cb.dataset.name = prov.name;
+        cb.onchange = saveProviders;
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(prov.name));
+        box.appendChild(lab);
+      });
+    }).catch(function (e) { el("provMsg").textContent = e.message; });
+  }
+  function saveProviders() {
+    var chosen = [];
+    el("provList").querySelectorAll("input:checked").forEach(function (cb) { chosen.push({ id: parseInt(cb.value, 10), name: cb.dataset.name }); });
+    el("provMsg").textContent = "Zapisuję…";
+    api("/api/providers", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({ providers: chosen }) })
+      .then(function () { el("provMsg").textContent = "Zapisano ✓ (" + chosen.length + ")"; })
+      .catch(function (e) { el("provMsg").textContent = e.message; });
+  }
+  function loadLibrary() {
+    api("/api/library").then(renderLibrary).catch(function (e) { el("backupMsg").textContent = e.message; });
   }
   function load() {
     el("loginMsg").textContent = "Łączę…";
@@ -185,24 +336,43 @@ internal const val CONFIG_PAGE = """<!doctype html>
       el("idle").value = s.idleMinutes;
       el("haUrl").value = s.haUrl;
       el("embyUrl").value = s.embyUrl;
-      el("remapInfo").textContent = s.remap.keyCode >= 0
-        ? "Przypisany przycisk: " + s.remap.keyName + ". Inny przycisk przypiszesz na telewizorze."
-        : "Najpierw na telewizorze wybierz „Przypisz przycisk” i wciśnij go na pilocie.";
-      el("remapAction").value = s.remap.action;
-      fillAppSelect(el("remapApp"), s.remap.pkg);
-      el("remapAppBox").classList.toggle("hidden", s.remap.action !== "OPEN_APP");
       SECRETS.forEach(function (name) {
         el("has_" + name).textContent = s.secrets[name] ? "zapisany ✓" : "";
         el("s_" + name).value = "";
       });
+      loadProviders();
+      loadLibrary();
     }).catch(function (e) {
       el("login").classList.remove("hidden");
       el("loginMsg").textContent = e.message;
     });
   }
+  el("qBtn").onclick = function () { var q = el("q").value.trim(); if (q) search(q); };
+  el("q").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); el("qBtn").onclick(); } });
+  el("exportBtn").onclick = function () {
+    fetch("/api/export", { headers: { "X-Pin": pin } }).then(function (r) {
+      if (!r.ok) throw new Error("Błąd " + r.status);
+      return r.blob();
+    }).then(function (blob) {
+      var a = node("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "dom-biblioteka-" + new Date().toISOString().slice(0, 10) + ".json";
+      document.body.appendChild(a); a.click(); a.remove();
+      el("backupMsg").textContent = "Pobrano ✓";
+    }).catch(function (e) { el("backupMsg").textContent = e.message; });
+  };
+  el("importFile").onchange = function () {
+    var file = el("importFile").files[0];
+    if (!file) return;
+    if (!confirm("Wczytać kopię? Obecne seriale i lista zostaną zastąpione.")) { el("importFile").value = ""; return; }
+    file.text().then(function (text) {
+      return api("/api/import", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({ json: text }) });
+    }).then(function (lib) { renderLibrary(lib); el("backupMsg").textContent = "Wczytano ✓"; })
+      .catch(function (e) { el("backupMsg").textContent = e.message; })
+      .then(function () { el("importFile").value = ""; });
+  };
   el("loginBtn").onclick = function () { pin = el("pin").value.replace(/\D/g, ""); load(); };
   el("addBtn").onclick = function () { var v = el("addApp").value; if (v) { favorites.push(v); renderFavorites(); } };
-  el("remapAction").onchange = function () { el("remapAppBox").classList.toggle("hidden", el("remapAction").value !== "OPEN_APP"); };
   el("saveBtn").onclick = function () {
     var secrets = {};
     SECRETS.forEach(function (name) { secrets[name] = el("s_" + name).value.trim(); });
@@ -211,7 +381,6 @@ internal const val CONFIG_PAGE = """<!doctype html>
       idleMinutes: parseInt(el("idle").value || "0", 10),
       haUrl: el("haUrl").value,
       embyUrl: el("embyUrl").value,
-      remap: { action: el("remapAction").value, pkg: el("remapApp").value || "" },
       secrets: secrets
     };
     el("msg").textContent = "Zapisuję…";

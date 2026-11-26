@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -22,15 +20,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
 import pl.dom.launcher.data.TvApp
 import pl.dom.launcher.update.UpdateState
+import pl.dom.launcher.media.Feeds
+import pl.dom.launcher.media.Library
+import pl.dom.launcher.media.TmdbImages
+import androidx.compose.foundation.lazy.items
 
 private val AppTileWidth = 110.dp
 private val AppTileHeight = 62.dp
@@ -40,6 +39,9 @@ fun StartScreen(
     favorites: List<TvApp>,
     onLaunch: (TvApp) -> Unit,
     onOpenAllApps: () -> Unit,
+    library: Library,
+    feeds: Feeds,
+    actions: MediaActions,
     updateState: UpdateState = UpdateState.Idle,
 ) {
     val firstApp = remember { FocusRequester() }
@@ -52,26 +54,31 @@ fun StartScreen(
     }
 
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
-        Text("Nowe odcinki Waszych seriali", fontSize = 11.sp, color = Palette.Soft)
-        Spacer(Modifier.height(8.dp))
-        Surface(
-            onClick = { },
-            modifier = Modifier.width(300.dp).height(70.dp),
-            shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(8.dp)),
-            colors = ClickableSurfaceDefaults.colors(
-                containerColor = Palette.Card.copy(alpha = 0.85f),
-                focusedContainerColor = Palette.Card,
-            ),
-        ) {
-            Column(Modifier.padding(12.dp)) {
-                Text("Połącz konto Trakt", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text)
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    "Nowe odcinki pojawią się tu w etapie 4. Klucze wpiszesz z telefonu w Ustawieniach.",
-                    fontSize = 9.sp,
-                    color = Palette.Muted,
+        val shows = library.showsWithNewEpisodes()
+        MediaRow("Nowe odcinki Waszych seriali", if (shows.isNotEmpty()) "${shows.size} do obejrzenia" else null) {
+            items(shows, key = { "show-${it.tmdbId}" }) { show ->
+                WideMediaCard(
+                    title = show.name, subtitle = show.cardSubtitle(), imageUrl = TmdbImages.backdrop(show.backdropPath),
+                    onClick = { actions.openProvider(show.provider, show.name) }, onLongClick = { actions.menuForShow(show) },
+                    badge = show.cardBadge(),
                 )
             }
+            items(feeds.embyResume, key = { "emby-${it.id}" }) { item ->
+                WideMediaCard(
+                    title = item.title,
+                    subtitle = listOf("Emby", item.subtitle).filter { it.isNotBlank() }.joinToString(" · "),
+                    imageUrl = item.imageUrl,
+                    onClick = { actions.openEmby() },
+                    onLongClick = { actions.menuForEmby(item) },
+                    badge = "Kontynuuj", badgeStrong = false, progress = item.progress,
+                )
+            }
+        }
+        if (shows.isEmpty() && feeds.embyResume.isEmpty()) {
+            EmptyNote(
+                feeds.problems.firstOrNull()
+                    ?: "Brak nowych odcinków. Seriale obserwujesz w zakładce Seriale albo na stronie w telefonie.",
+            )
         }
 
         // Środek ekranu zostaje pusty – tu widać domek.

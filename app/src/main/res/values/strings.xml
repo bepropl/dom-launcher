@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Dom</string>
-    <string name="a11y_label">Dom – przycisk Home</string>
-    <string name="a11y_description">Przechwytuje przycisk Home na pilocie i otwiera launcher Dom zamiast ekranu Google TV. Może też przypisać wybrany przycisk pilota do innej akcji. Nie czyta zawartości ekranu.</string>
 </resources>

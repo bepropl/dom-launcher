@@ -61,11 +61,9 @@ class SecretStore(context: Context) {
         const val HA_TOKEN = "ha_token"
         const val EMBY_KEY = "emby_key"
         const val TMDB_KEY = "tmdb_key"
-        const val TRAKT_CLIENT_ID = "trakt_client_id"
-        const val TRAKT_CLIENT_SECRET = "trakt_client_secret"
 
         /** Wszystkie sekrety, które da się ustawić ze strony na telefonie. */
-        val ALL = listOf(HA_TOKEN, EMBY_KEY, TMDB_KEY, TRAKT_CLIENT_ID, TRAKT_CLIENT_SECRET)
+        val ALL = listOf(HA_TOKEN, EMBY_KEY, TMDB_KEY)
 
         private const val KEYSTORE = "AndroidKeyStore"
         private const val ALIAS = "dom_launcher_secrets"

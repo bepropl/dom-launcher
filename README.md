@@ -1,17 +1,23 @@
-# Dom – launcher na Google TV (etap 1: szkielet)
+# Dom – launcher na Google TV
 
 Własny ekran główny dla telewizora Sony Bravia z Google TV.
 
-## Co działa w tym etapie
+## Co działa
 
 - Ekran **Start**: zegar i data, menu (Start / Do obejrzenia / Filmy / Seriale / Aplikacje), dolny rząd ulubionych aplikacji z **oficjalnymi banerami** pobranymi z telewizora.
 - Zakładka **Aplikacje**: wszystkie aplikacje. OK uruchamia aplikację, a **przytrzymanie OK** dodaje ją do ekranu Start albo z niego usuwa.
-- **Przycisk Home** na pilocie otwiera ten launcher (przez usługę ułatwień dostępu).
-- **Przypisanie dowolnego przycisku pilota** (np. Crunchyroll) do otwarcia launchera albo wybranej aplikacji.
+- **Przycisk Home** i inne przyciski pilota ustawiasz w aplikacji **Button Mapper** (launcher nie używa ułatwień dostępu, więc Play Protect go nie blokuje).
 - **Ochrona OLED**: interfejs przesuwa się co kilka minut o kilka pikseli. Po 5 minutach bez pilota (do zmiany) zostaje tylko mały zegar, który też się przesuwa.
-- **Konfiguracja z telefonu**: Ustawienia (zębatka w prawym górnym rogu) pokazują kod QR i PIN. Na telefonie ustawisz kolejność aplikacji, akcję przycisku, czas spoczynku oraz adresy i klucze Home Assistanta, Emby, TMDB i Traktu. Klucze są szyfrowane na telewizorze kluczem z Android Keystore.
+- **Konfiguracja z telefonu**: Ustawienia (zębatka w prawym górnym rogu) pokazują kod QR i PIN. Na telefonie ustawisz kolejność aplikacji, czas spoczynku oraz adresy i klucze Home Assistanta, Emby i TMDB, serwisy streamingowe oraz obserwowane seriale. Klucze są szyfrowane na telewizorze kluczem z Android Keystore.
 
-Domek, dane z Home Assistanta, seriale i filmy dojdą w kolejnych etapach. Mają już przygotowane miejsca w interfejsie.
+- **Domek w tle**: chmura punktów Waszego domu (OpenGL), powoli się obraca. W Ustawieniach: Pełna / Oszczędna / Wyłączony. Gdy launcher jest w tle, nic się nie rysuje.
+- **Seriale i filmy** (TMDB + własna lista w launcherze, bez Traktu):
+  - Start: nowe odcinki obserwowanych seriali i „Kontynuuj” z Emby.
+  - Do obejrzenia: „Dalej”, lista do obejrzenia, seriale czekające na nowe odcinki.
+  - Filmy i Seriale: polecane w Waszych serwisach (TMDB, region PL) i nowości z Emby na NAS.
+  - OK otwiera aplikację serwisu, **przytrzymanie OK** pokazuje menu (oznacz odcinek jako obejrzany, obserwuj, dodaj do listy…).
+
+Dane z Home Assistanta (pogoda, kto w domu, światła na domku, domofon) dojdą w kolejnym etapie.
 
 ## 1. Instalacja (bez komputera i bez ADB)
 
@@ -33,31 +39,27 @@ Każda zmiana w repozytorium jest automatycznie budowana przez GitHub Actions i 
 
 **Budowanie lokalne (opcjonalnie):** otwórz folder w Android Studio i kliknij Run ▶. Lokalna wersja jest podpisana innym kluczem niż wersje z GitHuba, więc przed powrotem do wersji z GitHuba trzeba ją odinstalować.
 
-## 3. Przycisk Home
+## 3. Przycisk Home i przyciski pilota
 
-1. W launcherze wejdź w **Ustawienia** (zębatka) i wybierz **Otwórz ułatwienia dostępu**.
-2. Włącz usługę **„Dom – przycisk Home”** i potwierdź.
-3. Od teraz Home otwiera launcher Dom.
+Launcher celowo **nie** używa usługi ułatwień dostępu. Google Play Protect blokuje instalację spoza Sklepu aplikacji, które z niej korzystają.
 
-Opcjonalnie (dla zaawansowanych) możesz też ustawić Dom jako domyślny ekran główny przez ADB:
+Przycisk Home ustaw w aplikacji **Button Mapper** (ze Sklepu Google Play): przycisk Home → „Otwórz aplikację” → **Dom**. Tak samo możesz przypisać np. przycisk Crunchyroll.
 
-```
-adb shell cmd package set-home-activity pl.dom.launcher/.MainActivity
-```
+**Nie wyłączaj** fabrycznego launchera Google (`com.google.android.apps.tv.launcherx`). U części osób kończyło się to pętlą restartów.
 
-**Nie wyłączaj** fabrycznego launchera Google (`com.google.android.apps.tv.launcherx`). U części osób kończyło się to pętlą restartów. Ten projekt go nie potrzebuje.
-
-**Jak to cofnąć:** wyłącz usługę „Dom – przycisk Home” w ułatwieniach dostępu albo odinstaluj aplikację „Dom” w ustawieniach aplikacji telewizora.
-
-## 4. Przycisk do przypisania (np. Crunchyroll)
-
-Ustawienia → **Przypisz przycisk** → w ciągu 15 sekund wciśnij przycisk na pilocie. Domyślnie przypisany przycisk otwiera launcher. Na stronie w telefonie możesz zamiast tego wybrać dowolną aplikację. Część przycisków aplikacji Sony może obsługiwać system wcześniej niż usługa. Jeśli jakiś przycisk się nie da przypisać, to właśnie ten przypadek.
-
-## 5. Konfiguracja z telefonu
+## 4. Konfiguracja z telefonu
 
 Ustawienia → zeskanuj kod QR telefonem w tej samej sieci. PIN jest wpisywany automatycznie z kodu, a w razie potrzeby wpiszesz go ręcznie. Strona działa tylko wtedy, gdy na telewizorze jest otwarty ekran Ustawień. Po 10 błędnych PIN-ach blokuje się do ponownego otwarcia ekranu.
 
 Pola z kluczami zostawione puste nie zmieniają zapisanej wartości. Wpisanie `-` usuwa klucz.
+
+Na tej samej stronie:
+- zaznaczasz swoje serwisy streamingowe (z nich są polecane filmy i seriale),
+- wyszukujesz seriale i filmy: **Obserwuj** (na bieżąco albo od początku) i **Do obejrzenia**,
+- poprawiasz „obejrzane do SxxEyy” przy obserwowanych serialach,
+- pobierasz i wczytujesz kopię zapasową listy (plik JSON).
+
+Klucz TMDB jest darmowy: themoviedb.org → Ustawienia → API (działa klucz v3 albo token odczytu v4).
 
 ## Struktura projektu
 
@@ -66,9 +68,12 @@ app/src/main/java/pl/dom/launcher/
   MainActivity.kt            ekran główny, budzenie z trybu spoczynku
   LauncherApp.kt             wspólne obiekty
   data/                      ustawienia (DataStore), zaszyfrowane klucze, lista aplikacji
-  service/                   usługa przycisku Home, nauka przycisków, aktywność pilota
+  house/                     domek: model punktów (assets/house.bin) i renderer OpenGL ES 2.0
+  media/                     TMDB, Emby, własna lista seriali i filmów
+  service/                   aktywność pilota (tryb spoczynku)
   config/                    serwer strony dla telefonu, strona HTML, kod QR
   update/                    aktualizacje OTA z wydań na GitHubie
-  ui/                        Compose for TV: pasek górny, menu, Start, Aplikacje, Ustawienia
+  ui/                        Compose for TV: pasek górny, menu, zakładki, karty, Ustawienia
+tools/house-model.js         generator assets/house.bin (node tools/house-model.js)
 ```
 

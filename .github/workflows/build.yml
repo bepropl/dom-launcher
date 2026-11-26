@@ -2,7 +2,7 @@ name: Zbuduj APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -42,7 +42,17 @@ jobs:
           ./gradlew --no-daemon assembleRelease
           cp app/build/outputs/apk/release/app-release.apk dom-launcher.apk
 
+      # Gałąź dev służy tylko do sprawdzenia, czy się kompiluje – APK jako artefakt, bez wydania.
+      - name: APK testowy (gałąź dev)
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dom-launcher-test
+          path: dom-launcher.apk
+          retention-days: 7
+
       - name: Wydanie (z niego telewizor pobiera aktualizacje)
+        if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}

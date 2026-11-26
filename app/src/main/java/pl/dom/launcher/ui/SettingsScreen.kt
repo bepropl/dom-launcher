@@ -1,9 +1,5 @@
 package pl.dom.launcher.ui
 
-import android.content.Intent
-import android.os.SystemClock
-import android.provider.Settings
-import android.view.KeyEvent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,14 +16,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -35,26 +27,18 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.tv.material3.Button
 import androidx.tv.material3.Text
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import pl.dom.launcher.LauncherApp
 import pl.dom.launcher.config.ConfigServer
 import pl.dom.launcher.config.Net
 import pl.dom.launcher.config.qrBitmap
+import pl.dom.launcher.data.HouseMode
 import pl.dom.launcher.data.LauncherSettings
-import pl.dom.launcher.data.RemapAction
-import pl.dom.launcher.service.HomeButtonService
-import pl.dom.launcher.service.KeyBus
 import pl.dom.launcher.update.UpdateState
 
 @Composable
@@ -75,32 +59,6 @@ fun SettingsScreen(settings: LauncherSettings?) {
     }
     val url = ip?.let { "http://$it:${ConfigServer.PORT}/#pin=$pin" }
     val qr = remember(url) { url?.let { qrBitmap(it, 480) } }
-
-    // Status usługi Home sprawdzamy przy każdym powrocie na ekran (np. z ustawień systemu).
-    var a11yEnabled by remember { mutableStateOf(HomeButtonService.isEnabled(context)) }
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) a11yEnabled = HomeButtonService.isEnabled(context)
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // --- Nauka przycisku pilota ---
-    var learning by remember { mutableStateOf(false) }
-    LaunchedEffect(learning) {
-        if (!learning) return@LaunchedEffect
-        KeyBus.learning.value = true
-        val since = SystemClock.uptimeMillis()
-        val press = withTimeoutOrNull(15_000) {
-            KeyBus.lastKey.filterNotNull().first { it.atMillis > since && KeyBus.isAssignable(it.keyCode) }
-        }
-        KeyBus.learning.value = false
-        learning = false
-        if (press != null) app.settings.setRemap(press.keyCode, RemapAction.OPEN_LAUNCHER, "")
-    }
-    DisposableEffect(Unit) { onDispose { KeyBus.learning.value = false } }
 
     Column(
         Modifier
@@ -123,7 +81,7 @@ fun SettingsScreen(settings: LauncherSettings?) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Konfiguracja z telefonu", fontSize = 15.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
                     Text(
-                        "Zeskanuj kod telefonem podłączonym do tej samej sieci. Wpiszesz tam klucze Home Assistanta, Emby, TMDB i Traktu oraz ułożysz aplikacje.",
+                        "Zeskanuj kod telefonem podłączonym do tej samej sieci. Wpiszesz tam klucze Home Assistanta, Emby i TMDB, wybierzesz serwisy, obserwowane seriale i ułożysz aplikacje.",
                         fontSize = 10.sp, color = Palette.Soft,
                     )
                     Text(url ?: "Telewizor nie ma połączenia z siecią.", fontSize = 11.sp, color = Palette.Amber)
@@ -141,43 +99,31 @@ fun SettingsScreen(settings: LauncherSettings?) {
         }
 
         Section {
-            Text("Przycisk Home na pilocie", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
+            Text("Przycisk Home i inne przyciski pilota", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
             Text(
-                if (a11yEnabled) "Włączone – Home otwiera ten launcher."
-                else "Wyłączone – włącz usługę „Dom – przycisk Home” w ułatwieniach dostępu.",
-                fontSize = 10.sp, color = if (a11yEnabled) Palette.Ok else Palette.Amber,
+                "Ustaw je w aplikacji Button Mapper: Home → „Otwórz aplikację” → Dom. Tak samo możesz przypisać przycisk Crunchyroll.",
+                fontSize = 10.sp, color = Palette.Soft,
             )
-            Button(onClick = {
-                runCatching {
-                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
-            }) { Text("Otwórz ułatwienia dostępu", fontSize = 11.sp) }
         }
 
         Section {
-            Text("Przycisk do przypisania (np. Crunchyroll)", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
-            val code = settings?.remapKeyCode ?: -1
-            val action = settings?.remapAction ?: RemapAction.NONE
+            Text("Domek w tle", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
+            val mode = settings?.houseMode ?: HouseMode.FULL
             Text(
-                if (code < 0 || action == RemapAction.NONE) "Brak przypisania."
-                else "${KeyEvent.keyCodeToString(code)} → ${action.label(settings?.remapPackage)}",
+                when (mode) {
+                    HouseMode.FULL -> "Pełna jakość: wszystkie punkty, 30 klatek na sekundę."
+                    HouseMode.ECO -> "Oszczędna: połowa punktów, 20 klatek na sekundę."
+                    HouseMode.OFF -> "Wyłączony: czarne tło, zero obciążenia."
+                },
                 fontSize = 10.sp, color = Palette.Soft,
             )
-            if (learning) {
-                Text("Naciśnij teraz przycisk na pilocie… (15 s)", fontSize = 12.sp, color = Palette.Amber)
-            }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = { learning = true }, enabled = a11yEnabled && !learning) {
-                    Text("Przypisz przycisk", fontSize = 11.sp)
-                }
-                Button(onClick = { scope.launch { app.settings.setRemap(-1, RemapAction.NONE, "") } }) {
-                    Text("Usuń przypisanie", fontSize = 11.sp)
+                listOf(HouseMode.FULL to "Pełna", HouseMode.ECO to "Oszczędna", HouseMode.OFF to "Wyłączony").forEach { (m, label) ->
+                    Button(onClick = { scope.launch { app.settings.setHouseMode(m) } }) {
+                        Text(if (m == mode) "✓ $label" else label, fontSize = 11.sp)
+                    }
                 }
             }
-            Text(
-                "Domyślnie przycisk otwiera launcher. Inną aplikację wybierzesz na stronie w telefonie.",
-                fontSize = 9.sp, color = Palette.Muted,
-            )
         }
 
         Section {
@@ -240,8 +186,3 @@ private fun Section(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-private fun RemapAction.label(packageName: String?): String = when (this) {
-    RemapAction.NONE -> "nic"
-    RemapAction.OPEN_LAUNCHER -> "otwiera launcher"
-    RemapAction.OPEN_APP -> "otwiera ${packageName.orEmpty()}"
-}

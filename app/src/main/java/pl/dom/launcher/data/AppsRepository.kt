@@ -44,6 +44,18 @@ class AppsRepository(private val context: Context) {
             .sortedBy { it.label.lowercase() }
     }
 
+    /** Szuka zainstalowanej aplikacji po nazwie serwisu, np. „Disney Plus” → „Disney+”. */
+    fun findByName(name: String): TvApp? {
+        fun norm(t: String) = t.lowercase().replace("plus", "").filter { it.isLetterOrDigit() }
+        val wanted = norm(name)
+        if (wanted.isEmpty()) return null
+        return _apps.value.firstOrNull { norm(it.label) == wanted }
+            ?: _apps.value.firstOrNull { app ->
+                val label = norm(app.label)
+                label.length >= 3 && (wanted.contains(label) || label.contains(wanted))
+            }
+    }
+
     fun launch(packageName: String): Boolean {
         val intent = pm.getLeanbackLaunchIntentForPackage(packageName)
             ?: pm.getLaunchIntentForPackage(packageName)

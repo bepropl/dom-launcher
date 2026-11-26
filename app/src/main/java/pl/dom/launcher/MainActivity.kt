@@ -28,7 +28,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_GO_HOME, false) || intent.hasCategory(Intent.CATEGORY_HOME)) {
+        // Home, ikona aplikacji albo Button Mapper: zawsze wracamy na ekran Start.
+        if (intent.action == Intent.ACTION_MAIN || intent.getBooleanExtra(EXTRA_GO_HOME, false)) {
             goHome.value++
         }
     }
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
         val app = LauncherApp.from(this)
         lifecycleScope.launch { app.apps.refresh() }
         lifecycleScope.launch { app.updater.checkIfDue() }
+        lifecycleScope.launch { app.media.refreshIfDue() }
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {

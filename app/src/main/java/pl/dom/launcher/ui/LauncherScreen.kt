@@ -23,6 +23,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import android.os.SystemClock
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -35,11 +39,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import pl.dom.launcher.LauncherApp
 import pl.dom.launcher.data.AppsRepository
+import pl.dom.launcher.data.HouseMode
 import pl.dom.launcher.data.TvApp
 import pl.dom.launcher.service.Interaction
 
 private val Tabs = listOf("Start", "Do obejrzenia", "Filmy", "Seriale", "Aplikacje")
 private const val TAB_START = 0
+private const val TAB_WATCHLIST = 1
+private const val TAB_MOVIES = 2
+private const val TAB_SHOWS = 3
 private const val TAB_APPS = 4
 
 @Composable
@@ -51,6 +59,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     val settings by app.settings.flow.collectAsStateWithLifecycle(initialValue = null)
     val apps by app.apps.apps.collectAsStateWithLifecycle()
     val updateState by app.updater.state.collectAsStateWithLifecycle()
+    val library by app.media.library.state.collectAsStateWithLifecycle()
+    val feeds by app.media.feeds.collectAsStateWithLifecycle()
 
     var tab by rememberSaveable { mutableIntStateOf(TAB_START) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -95,14 +105,51 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         AppsRepository.resolveFavorites(favoritePackages, apps)
     }
 
-    fun toggleFavorite(target: TvApp) {
-        val current = favorites.map { it.packageName }
-        val updated = if (target.packageName in current) current - target.packageName else current + target.packageName
-        scope.launch { app.settings.setFavorites(updated) }
+    // Krótki komunikat na dole ekranu (np. „Dodano Netflix do ekranu Start”).
+    var toast by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(toast) {
+        if (toast != null) {
+            delay(2500)
+            toast = null
+        }
     }
 
-    Box(Modifier.fillMaxSize().background(Palette.Bg)) {
-        HouseWallpaper(Modifier.fillMaxSize(), dim = if (idle) 0.55f else 1f)
+    // Przytrzymanie OK potrafi wywołać akcję więcej niż raz, więc ta sama aplikacja
+    // może zmienić stan najwyżej raz na sekundę. Liczymy zawsze od tego, co jest zapisane.
+    val lastToggle = remember { mutableMapOf<String, Long>() }
+    fun toggleFavorite(target: TvApp) {
+        val now = SystemClock.uptimeMillis()
+        if (now - (lastToggle[target.packageName] ?: 0L) < 1000) return
+        lastToggle[target.packageName] = now
+        scope.launch {
+            val installed = app.apps.apps.value
+            val stored = app.settings.current().favorites
+            val base = if (stored.isEmpty()) {
+                AppsRepository.resolveFavorites(emptyList(), installed).map { it.packageName }
+            } else {
+                stored.filter { pkg -> installed.any { it.packageName == pkg } }
+            }
+            val adding = target.packageName !in base
+            app.settings.setFavorites(if (adding) base + target.packageName else base - target.packageName)
+            toast = if (adding) "Dodano „${target.label}” do ekranu Start" else "Usunięto „${target.label}” z ekranu Start"
+        }
+    }
+
+    var menu by remember { mutableStateOf<MenuRequest?>(null) }
+    val actions = remember { MediaActions(app, scope, toast = { toast = it }, menu = { menu = it }) }
+
+    // Kafelek „Wszystkie” przenosi fokus na zakładkę Aplikacje. Gdyby fokus po prostu zniknął
+    // razem z kafelkiem, trafiłby na pierwszą zakładkę (Start) i ekran od razu by wrócił.
+    val tabFocus = remember { List(Tabs.size) { FocusRequester() } }
+    var focusAppsGrid by remember { mutableStateOf(false) }
+
+    // Bez tła: pod spodem rysuje się domek (OpenGL), który sam czyści ekran na czarno.
+    Box(Modifier.fillMaxSize()) {
+        HouseWallpaper(
+            Modifier.fillMaxSize(),
+            dim = if (idle) 0.55f else 1f,
+            mode = settings?.houseMode ?: HouseMode.FULL,
+        )
 
         Column(
             Modifier
@@ -117,12 +164,18 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
             if (showSettings) {
                 SettingsScreen(settings = settings)
             } else {
-                MainTabs(tabs = Tabs, selected = tab, onSelect = { tab = it })
+                MainTabs(tabs = Tabs, selected = tab, onSelect = { tab = it }, focusRequesters = tabFocus)
                 when (tab) {
                     TAB_START -> StartScreen(
                         favorites = favorites,
                         onLaunch = { app.apps.launch(it.packageName) },
-                        onOpenAllApps = { tab = TAB_APPS },
+                        library = library,
+                        feeds = feeds,
+                        actions = actions,
+                        onOpenAllApps = {
+                            focusAppsGrid = true
+                            if (runCatching { tabFocus[TAB_APPS].requestFocus() }.isFailure) tab = TAB_APPS
+                        },
                         updateState = updateState,
                     )
                     TAB_APPS -> AppsScreen(
@@ -130,11 +183,30 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                         favoritePackages = favorites.map { it.packageName }.toSet(),
                         onLaunch = { app.apps.launch(it.packageName) },
                         onToggleFavorite = ::toggleFavorite,
+                        focusFirstApp = focusAppsGrid,
+                        onFirstAppFocused = { focusAppsGrid = false },
                     )
-                    else -> ComingSoon("Ta zakładka pojawi się w etapie 4 (Trakt, TMDB i Emby).")
+                    TAB_WATCHLIST -> WatchlistScreen(library, feeds, actions)
+                    TAB_MOVIES -> MoviesScreen(feeds, actions)
+                    TAB_SHOWS -> ShowsScreen(library, feeds, actions)
                 }
             }
         }
+
+        toast?.let { message ->
+            Box(Modifier.fillMaxSize().padding(bottom = 30.dp), contentAlignment = Alignment.BottomCenter) {
+                Text(
+                    message,
+                    modifier = Modifier
+                        .background(Color(0xEE14100C), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    fontSize = 12.sp,
+                    color = Palette.Text,
+                )
+            }
+        }
+
+        menu?.let { request -> ActionMenu(request, onDismiss = { menu = null }) }
 
         if (idle) IdleClock()
     }

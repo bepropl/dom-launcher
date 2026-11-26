@@ -6,6 +6,10 @@ import pl.dom.launcher.data.AppsRepository
 import pl.dom.launcher.data.SecretStore
 import pl.dom.launcher.data.SettingsRepository
 import pl.dom.launcher.update.Updater
+import pl.dom.launcher.media.MediaRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /** Wspólne obiekty dla całej aplikacji: ustawienia, zaszyfrowane klucze i lista aplikacji. */
 class LauncherApp : Application() {
@@ -17,6 +21,11 @@ class LauncherApp : Application() {
         private set
     lateinit var updater: Updater
         private set
+    lateinit var media: MediaRepository
+        private set
+
+    /** Zadania w tle niezależne od ekranu (np. odświeżenie po zmianach z telefonu). */
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
@@ -24,6 +33,7 @@ class LauncherApp : Application() {
         secrets = SecretStore(this)
         apps = AppsRepository(this)
         updater = Updater(this)
+        media = MediaRepository(this, settings, secrets)
     }
 
     companion object {
