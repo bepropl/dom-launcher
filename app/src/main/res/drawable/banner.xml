@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Baner 320x180 widoczny w ustawieniach Google TV. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path android:fillColor="#070504" android:pathData="M0,0h320v180h-320z" />
+    <path
+        android:strokeColor="#F2A65A"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M110,120 L110,82 L160,48 L210,82 L210,120 Z" />
+    <path android:fillColor="#F2A65A" android:pathData="M150,96h20v24h-20z" />
+</vector>
