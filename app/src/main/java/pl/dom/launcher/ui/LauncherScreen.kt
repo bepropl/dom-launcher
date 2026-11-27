@@ -86,15 +86,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     // Panel zębatki (z prawej, jak w Google TV).
     var showPanel by remember { mutableStateOf(false) }
     val gearFocus = remember { FocusRequester() }
-    var panelWasOpen by remember { mutableStateOf(false) }
-    LaunchedEffect(showPanel) {
-        if (showPanel) panelWasOpen = true
-        else if (panelWasOpen) {
-            panelWasOpen = false
-            delay(150)
-            if (!showSettings) runCatching { gearFocus.requestFocus() }
-        }
-    }
+    val bellFocus = remember { FocusRequester() }
     val allAppsTile = remember { FocusRequester() }
     var returnToAllTile by remember { mutableStateOf(false) }
 
@@ -290,6 +282,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                 modifier = Modifier.padding(horizontal = EdgePadding),
                 onOpenSettings = { showPanel = true },
                 settingsFocus = gearFocus,
+                notificationsFocus = bellFocus,
                 ha = haSummary,
                 haStatus = haStatus,
                 unread = haRecent.count { it.at > seenNotifications },
@@ -372,12 +365,22 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         }
 
         menu?.let { request -> ActionMenu(request, onDismiss = { menu = null }) }
-        if (showNotifications) NotificationsDialog(haRecent, onDismiss = { showNotifications = false })
+        SidePanel(
+            visible = showNotifications,
+            title = "Powiadomienia",
+            returnFocus = bellFocus,
+            onClose = { showNotifications = false },
+        ) { first, _ ->
+            NotificationsPanelContent(haRecent, first, showNotifications, onClear = { app.ha.clearRecent() })
+        }
 
         SidePanel(
             visible = showPanel,
             title = "Ustawienia",
-            items = settingsPanelItems(
+            returnFocus = gearFocus,
+            onClose = { showPanel = false },
+        ) { first, _ ->
+            val items = settingsPanelItems(
                 onLauncher = {
                     showPanel = false
                     showSettings = true
@@ -397,9 +400,15 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                         else -> app.updater.openInstallPermissionSettings()
                     }
                 },
-            ),
-            onClose = { showPanel = false },
-        )
+            )
+            items.forEachIndexed { index, item ->
+                PanelRow(
+                    item.title, item.subtitle, item.icon, item.onClick,
+                    modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
+                    visible = showPanel,
+                )
+            }
+        }
 
         NotificationPopup(
             app.ha.notifications,

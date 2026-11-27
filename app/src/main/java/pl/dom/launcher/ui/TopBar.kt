@@ -57,6 +57,7 @@ fun TopBar(
     unread: Int = 0,
     onOpenNotifications: () -> Unit = {},
     settingsFocus: FocusRequester? = null,
+    notificationsFocus: FocusRequester? = null,
 ) {
     val now by rememberNow()
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -109,7 +110,10 @@ fun TopBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box {
-                RoundIconButton(Icons.Filled.Notifications, "Powiadomienia", onOpenNotifications)
+                RoundIconButton(
+                    Icons.Filled.Notifications, "Powiadomienia", onOpenNotifications,
+                    modifier = notificationsFocus?.let { Modifier.focusRequester(it) } ?: Modifier,
+                )
                 if (unread > 0) {
                     Box(
                         Modifier.align(Alignment.TopEnd).size(8.dp).background(Palette.Amber, CircleShape),

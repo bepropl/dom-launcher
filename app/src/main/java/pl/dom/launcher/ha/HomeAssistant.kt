@@ -274,7 +274,13 @@ class HomeAssistant(
     /** Pokazuje powiadomienie (też do testu ze strony w telefonie). */
     fun show(notification: HaNotification) {
         _notifications.tryEmit(notification)
-        _recent.value = (listOf(notification.copy(image = null)) + _recent.value).take(20)
+        // Zdjęcia zostają tylko przy 5 najnowszych (pamięć), lista trzyma 20 pozycji.
+        _recent.value = (listOf(notification) + _recent.value).take(20)
+            .mapIndexed { i, n -> if (i < 5 || n.image == null) n else n.copy(image = null) }
+    }
+
+    fun clearRecent() {
+        _recent.value = emptyList()
     }
 
     /** Zdjęcie z HA (kamera albo ścieżka /local/…) z tokenem; zmniejszone do ok. 960 px szerokości. */
