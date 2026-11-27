@@ -34,6 +34,13 @@ internal const val CONFIG_PAGE = """<!doctype html>
   .bar .inner { max-width: 640px; margin: 0 auto; display: flex; gap: 12px; align-items: center; }
   #msg { flex: 1; font-size: 14px; color: #D9C7AE; }
   .hidden { display: none; }
+  select { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); background: #241c15; color: #F4EBDD; font-size: 16px; margin-bottom: 10px; }
+  h3 { font-size: 15px; font-weight: 500; margin: 18px 0 4px; color: #F2A65A; }
+  pre { background: #120d0a; border-radius: 10px; padding: 10px; font-size: 12px; overflow-x: auto; color: #D9C9B2; }
+  .fp { display: block; word-break: break-all; font-size: 12px; background: #120d0a; padding: 8px; border-radius: 8px; margin-bottom: 8px; }
+  .room { display: flex; gap: 8px; align-items: center; }
+  .room span { flex: 0 0 42%; font-size: 14px; }
+  .room select { margin-bottom: 6px; }
   .checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .checks label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); color: #F4EBDD; font-size: 15px; }
   .checks input { width: auto; margin: 0; }
@@ -84,9 +91,45 @@ internal const val CONFIG_PAGE = """<!doctype html>
     <section>
       <h2>Home Assistant</h2>
       <label for="haUrl">Adres</label>
-      <input id="haUrl" placeholder="http://192.168.1.10:8123" autocomplete="off">
+      <input id="haUrl" placeholder="https://192.168.100.131:8123" autocomplete="off">
       <label for="s_ha_token">Token długoterminowy <span class="saved" id="has_ha_token"></span></label>
       <input id="s_ha_token" type="password" autocomplete="off" placeholder="Wklej token (puste = bez zmian, „-” = usuń)">
+      <p class="hint">Token: HA → Twój profil → Bezpieczeństwo → Tokeny dostępu długoterminowego → Utwórz token. Po wpisaniu kliknij Zapisz na dole.</p>
+      <p class="hint" id="haStatus"></p>
+      <div id="haTrust" class="hidden">
+        <p class="hint">Odcisk certyfikatu (SHA-256):</p>
+        <code id="haFingerprint" class="fp"></code>
+        <button type="button" id="haTrustBtn">Ufaj temu certyfikatowi</button>
+      </div>
+      <div id="haEntities" class="hidden">
+        <label for="haWeather">Pogoda</label>
+        <select id="haWeather"></select>
+        <label for="haOutside">Temperatura na zewnątrz <span class="hint">(puste = z pogody)</span></label>
+        <select id="haOutside"></select>
+        <label for="haInside">Temperatura w domu</label>
+        <select id="haInside"></select>
+        <label>Osoby (liczone „w domu”)</label>
+        <div id="haPersons" class="checks"></div>
+        <h3>Światła na domku</h3>
+        <p class="hint">Włączone światło rozjaśnia ten pokój na domku w tle.</p>
+        <div id="haRooms"></div>
+        <div class="row wrap">
+          <button type="button" id="haSaveBtn">Zapisz ustawienia HA</button>
+        </div>
+        <p class="hint" id="haMsg"></p>
+        <h3>Powiadomienia</h3>
+        <p class="hint">W automatyzacji HA dodaj akcję „Wywołaj zdarzenie” (edytuj w YAML):</p>
+        <pre>- event: dom_launcher_notify
+  event_data:
+    title: Pralka
+    message: Pranie skończone
+    camera: camera.furtka   # opcjonalnie – podgląd z kamery
+    seconds: 15             # opcjonalnie – jak długo widać</pre>
+        <p class="hint">Nad innymi aplikacjami (Netflix, YouTube…) dymek pojawi się, gdy włączona jest usługa „Dom – ekran główny”.</p>
+        <label for="haCamera">Kamera do testu (opcjonalnie)</label>
+        <select id="haCamera"></select>
+        <button type="button" id="haTestBtn">Wyślij testowe powiadomienie na telewizor</button>
+      </div>
     </section>
 
     <section>
@@ -322,6 +365,70 @@ internal const val CONFIG_PAGE = """<!doctype html>
       .then(function () { el("provMsg").textContent = "Zapisano ✓ (" + chosen.length + ")"; })
       .catch(function (e) { el("provMsg").textContent = e.message; });
   }
+  var haPolls = 0;
+  function fillSelect(id, items, value, emptyLabel) {
+    var sel = el(id);
+    sel.textContent = "";
+    var none = node("option", "", emptyLabel || "— brak —"); none.value = ""; sel.appendChild(none);
+    items.forEach(function (it) {
+      var o = node("option", "", it.name + "  (" + it.state + ")"); o.value = it.id;
+      if (it.id === value) o.selected = true;
+      sel.appendChild(o);
+    });
+    if (value && !items.some(function (it) { return it.id === value; })) {
+      var missing = node("option", "", value + " (nie znaleziono)"); missing.value = value; missing.selected = true; sel.appendChild(missing);
+    }
+  }
+  function loadHa() {
+    api("/api/ha").then(function (h) {
+      var st = h.status;
+      el("haStatus").textContent = st.message || "";
+      el("haTrust").classList.toggle("hidden", st.status !== "untrusted");
+      if (st.status === "untrusted") el("haFingerprint").textContent = st.fingerprint;
+      var connected = st.status === "connected";
+      el("haEntities").classList.toggle("hidden", !connected);
+      if ((st.status === "connecting" || (st.status === "off" && el("haUrl").value)) && haPolls < 15) { haPolls++; setTimeout(loadHa, 2000); return; }
+      if (!connected) return;
+      var c = h.config;
+      fillSelect("haWeather", h.weather, c.weather);
+      fillSelect("haOutside", h.temps, c.outsideTemp, "— z pogody —");
+      fillSelect("haInside", h.temps, c.insideTemp);
+      fillSelect("haCamera", h.cameras, "", "— bez obrazu —");
+      var persons = el("haPersons");
+      persons.textContent = "";
+      if (!h.persons.length) persons.appendChild(node("span", "hint", "Brak encji person.* w HA."));
+      h.persons.forEach(function (p) {
+        var lab = node("label");
+        var cb = node("input"); cb.type = "checkbox"; cb.value = p.id; cb.checked = c.persons.indexOf(p.id) >= 0;
+        lab.appendChild(cb);
+        lab.appendChild(document.createTextNode(p.name));
+        persons.appendChild(lab);
+      });
+      var rooms = el("haRooms");
+      rooms.textContent = "";
+      h.rooms.forEach(function (r) {
+        var row = node("div", "room");
+        row.appendChild(node("span", "", r.name));
+        var sel = node("select"); sel.id = "room_" + r.id; sel.dataset.room = r.id;
+        sel.setAttribute("aria-label", r.name);
+        row.appendChild(sel);
+        rooms.appendChild(row);
+        fillSelect(sel.id, h.lights, c.rooms[String(r.id)] || "");
+      });
+    }).catch(function (e) { el("haStatus").textContent = e.message; });
+  }
+  function saveHa() {
+    var persons = [];
+    el("haPersons").querySelectorAll("input:checked").forEach(function (cb) { persons.push(cb.value); });
+    var rooms = {};
+    el("haRooms").querySelectorAll("select").forEach(function (sel) { if (sel.value) rooms[sel.dataset.room] = sel.value; });
+    el("haMsg").textContent = "Zapisuję…";
+    api("/api/ha/config", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({
+      weather: el("haWeather").value, outsideTemp: el("haOutside").value, insideTemp: el("haInside").value,
+      persons: persons, rooms: rooms
+    }) }).then(function () { el("haMsg").textContent = "Zapisano ✓"; })
+      .catch(function (e) { el("haMsg").textContent = e.message; });
+  }
   function loadLibrary() {
     api("/api/library").then(renderLibrary).catch(function (e) { el("backupMsg").textContent = e.message; });
   }
@@ -342,11 +449,26 @@ internal const val CONFIG_PAGE = """<!doctype html>
       });
       loadProviders();
       loadLibrary();
+      haPolls = 0;
+      loadHa();
     }).catch(function (e) {
       el("login").classList.remove("hidden");
       el("loginMsg").textContent = e.message;
     });
   }
+  el("haSaveBtn").onclick = saveHa;
+  el("haTrustBtn").onclick = function () {
+    el("haStatus").textContent = "Zapisuję…";
+    api("/api/ha/trust", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({ fingerprint: el("haFingerprint").textContent }) })
+      .then(function () { haPolls = 0; setTimeout(loadHa, 1500); })
+      .catch(function (e) { el("haStatus").textContent = e.message; });
+  };
+  el("haTestBtn").onclick = function () {
+    el("haMsg").textContent = "Wysyłam…";
+    api("/api/ha/test", { method: "POST", headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({ camera: el("haCamera").value }) })
+      .then(function () { el("haMsg").textContent = "Wysłano – spójrz na telewizor."; })
+      .catch(function (e) { el("haMsg").textContent = e.message; });
+  };
   el("qBtn").onclick = function () { var q = el("q").value.trim(); if (q) search(q); };
   el("q").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); el("qBtn").onclick(); } });
   el("exportBtn").onclick = function () {

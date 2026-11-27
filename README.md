@@ -18,7 +18,13 @@ Własny ekran główny dla telewizora Sony Bravia z Google TV.
   - Filmy i Seriale: polecane w Waszych serwisach (TMDB, region PL) i nowości z Emby na NAS.
   - OK otwiera aplikację serwisu, **przytrzymanie OK** pokazuje menu (oznacz odcinek jako obejrzany, obserwuj, dodaj do listy…).
 
-Dane z Home Assistanta (pogoda, kto w domu, światła na domku, domofon) dojdą w kolejnym etapie.
+- **Home Assistant** (stałe połączenie WebSocket):
+  - pasek u góry: pogoda, temperatura na zewnątrz i w domu, kto jest w domu,
+  - światła na domku: włączona lampa rozjaśnia swój pokój,
+  - powiadomienia: zdarzenie `dom_launcher_notify` z automatyzacji (tytuł, treść, opcjonalnie obraz z kamery). W launcherze dymek pokazuje sam launcher, nad innymi aplikacjami – usługa „Dom – ekran główny”. Dzwonek w pasku pokazuje ostatnie powiadomienia.
+  - HA z własnym certyfikatem: na stronie w telefonie pojawi się odcisk certyfikatu i przycisk „Ufaj”.
+
+Domofon (podgląd i otwieranie furtki) dojdzie, gdy będzie w HA.
 
 ## 1. Instalacja (bez komputera i bez ADB)
 

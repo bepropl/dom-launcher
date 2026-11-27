@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import pl.dom.launcher.ha.HaConfig
 
 private val Context.dataStore by preferencesDataStore(name = "launcher")
 
@@ -29,6 +30,8 @@ data class LauncherSettings(
     val houseMode: HouseMode,
     /** Serwisy, które macie – Filmy i Seriale pokazują tylko to, co jest w nich dostępne. */
     val providers: List<StreamingProvider>,
+    /** Wybrane encje Home Assistanta i zaufany certyfikat. */
+    val ha: HaConfig,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -40,6 +43,7 @@ class SettingsRepository(private val context: Context) {
         val embyUrl = stringPreferencesKey("emby_url")
         val houseMode = stringPreferencesKey("house_mode")
         val providers = stringPreferencesKey("providers")
+        val haConfig = stringPreferencesKey("ha_config")
     }
 
     val flow: Flow<LauncherSettings> = context.dataStore.data.map { it.toSettings() }
@@ -60,6 +64,12 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setHouseMode(mode: HouseMode) = context.dataStore.edit { it[Keys.houseMode] = mode.name }
 
+    suspend fun setHaConfig(config: HaConfig) = context.dataStore.edit { it[Keys.haConfig] = config.toJson() }
+
+    suspend fun updateHaConfig(change: (HaConfig) -> HaConfig) = context.dataStore.edit { prefs ->
+        prefs[Keys.haConfig] = change(HaConfig.fromJson(prefs[Keys.haConfig])).toJson()
+    }
+
     /** Zapis jako „8:Netflix|337:Disney Plus”. */
     suspend fun setProviders(providers: List<StreamingProvider>) = context.dataStore.edit { prefs ->
         prefs[Keys.providers] = providers.joinToString("|") { "${it.id}:${it.name.replace("|", " ")}" }
@@ -75,5 +85,6 @@ class SettingsRepository(private val context: Context) {
             val id = entry.substringBefore(':').toIntOrNull() ?: return@mapNotNull null
             StreamingProvider(id, entry.substringAfter(':'))
         },
+        ha = HaConfig.fromJson(this[Keys.haConfig]),
     )
 }

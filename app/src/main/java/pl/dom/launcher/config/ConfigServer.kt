@@ -11,6 +11,10 @@ import pl.dom.launcher.data.AppsRepository
 import pl.dom.launcher.data.SecretStore
 import pl.dom.launcher.data.StreamingProvider
 import pl.dom.launcher.media.Episode
+import pl.dom.launcher.ha.HaNotification
+import pl.dom.launcher.ha.HaState
+import pl.dom.launcher.ha.HaStatus
+import pl.dom.launcher.house.HouseRooms
 import pl.dom.launcher.media.MediaType
 import pl.dom.launcher.media.MissingKeyException
 import pl.dom.launcher.media.TmdbImages
@@ -55,6 +59,45 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
             post && session.uri == "/api/save" -> {
                 save(body(session))
                 refreshMedia()
+                app.ha.reconnect()
+                ok()
+            }
+            get && session.uri == "/api/ha" -> json(Response.Status.OK, haInfo())
+            post && session.uri == "/api/ha/config" -> {
+                val b = body(session)
+                fun pick(name: String) = b.optString(name, "").takeIf { it.isNotBlank() && it != "null" }
+                val persons = b.optJSONArray("persons")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
+                val roomsJson = b.optJSONObject("rooms") ?: JSONObject()
+                val rooms = roomsJson.keys().asSequence().mapNotNull { key ->
+                    val entity = roomsJson.optString(key).takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    key.toIntOrNull()?.let { it to entity }
+                }.toMap()
+                runBlocking {
+                    app.settings.updateHaConfig {
+                        it.copy(weather = pick("weather"), outsideTemp = pick("outsideTemp"), insideTemp = pick("insideTemp"), persons = persons, rooms = rooms)
+                    }
+                }
+                ok()
+            }
+            post && session.uri == "/api/ha/trust" -> {
+                val fingerprint = body(session).optString("fingerprint").takeIf { it.isNotBlank() }
+                runBlocking { app.settings.updateHaConfig { it.copy(certSha256 = fingerprint) } }
+                app.ha.reconnect()
+                ok()
+            }
+            post && session.uri == "/api/ha/test" -> {
+                val camera = body(session).optString("camera").takeIf { it.isNotBlank() }
+                app.scope.launch {
+                    val image = camera?.let { app.ha.fetchImage("/api/camera_proxy/$it") }
+                    app.ha.show(
+                        HaNotification(
+                            title = "Test powiadomienia",
+                            message = if (camera != null && image == null) "Nie udało się pobrać obrazu z $camera" else "Tak będą wyglądać powiadomienia z Home Assistanta.",
+                            image = image,
+                            seconds = 12,
+                        ),
+                    )
+                }
                 ok()
             }
             get && session.uri == "/api/library" -> json(Response.Status.OK, library())
@@ -97,6 +140,36 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
     /** Po zmianach odświeża rzędy na telewizorze w tle. */
     private fun refreshMedia() {
         app.scope.launch { runCatching { app.media.refresh() } }
+    }
+
+    private fun haStatusJson(): JSONObject {
+        val o = JSONObject()
+        when (val st = app.ha.status.value) {
+            HaStatus.Off -> o.put("status", "off").put("message", "Wpisz adres i token, potem Zapisz.")
+            HaStatus.Connecting -> o.put("status", "connecting").put("message", "Łączę…")
+            HaStatus.Connected -> o.put("status", "connected").put("message", "Połączono ✓")
+            is HaStatus.Error -> o.put("status", "error").put("message", "Błąd: " + st.message)
+            is HaStatus.Untrusted -> o.put("status", "untrusted").put("fingerprint", st.fingerprint)
+                .put("message", "Home Assistant ma własny certyfikat. Sprawdź, że to Twój serwer, i kliknij „Ufaj”.")
+        }
+        return o
+    }
+
+    private fun haInfo(): JSONObject = runBlocking {
+        val config = app.settings.current().ha
+        val states = app.ha.states.value.values.sortedBy { it.name.lowercase() }
+        fun list(filter: (HaState) -> Boolean) = JSONArray(states.filter(filter).map {
+            JSONObject().put("id", it.entityId).put("name", it.name).put("state", it.state + (it.unit?.let { u -> " $u" } ?: ""))
+        })
+        JSONObject()
+            .put("status", haStatusJson())
+            .put("weather", list { it.domain == "weather" })
+            .put("temps", list { it.domain == "sensor" && (it.attributes.optString("device_class") == "temperature" || it.unit == "°C") })
+            .put("persons", list { it.domain == "person" })
+            .put("lights", list { it.domain == "light" || it.domain == "switch" })
+            .put("cameras", list { it.domain == "camera" })
+            .put("rooms", JSONArray(HouseRooms.names.toSortedMap().map { (id, name) -> JSONObject().put("id", id).put("name", name) }))
+            .put("config", JSONObject(config.toJson()))
     }
 
     private fun episode(e: Episode?): Any = e?.let {
@@ -187,6 +260,7 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
             .put("favorites", JSONArray(favorites))
             .put("apps", JSONArray(all.map { JSONObject().put("pkg", it.packageName).put("label", it.label) }))
             .put("secrets", JSONObject().apply { SecretStore.ALL.forEach { put(it, app.secrets.has(it)) } })
+            .put("ha", haStatusJson())
     }
 
     private fun save(body: JSONObject) = runBlocking {

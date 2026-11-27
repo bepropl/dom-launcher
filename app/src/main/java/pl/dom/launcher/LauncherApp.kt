@@ -7,6 +7,7 @@ import pl.dom.launcher.data.SecretStore
 import pl.dom.launcher.data.SettingsRepository
 import pl.dom.launcher.update.Updater
 import pl.dom.launcher.media.MediaRepository
+import pl.dom.launcher.ha.HomeAssistant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +24,8 @@ class LauncherApp : Application() {
         private set
     lateinit var media: MediaRepository
         private set
+    lateinit var ha: HomeAssistant
+        private set
 
     /** Zadania w tle niezależne od ekranu (np. odświeżenie po zmianach z telefonu). */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -34,6 +37,7 @@ class LauncherApp : Application() {
         apps = AppsRepository(this)
         updater = Updater(this)
         media = MediaRepository(this, settings, secrets)
+        ha = HomeAssistant(settings, secrets, scope).also { it.start() }
     }
 
     companion object {

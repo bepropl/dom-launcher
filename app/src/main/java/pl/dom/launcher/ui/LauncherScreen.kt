@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import pl.dom.launcher.LauncherApp
 import pl.dom.launcher.data.AppsRepository
 import pl.dom.launcher.data.HouseMode
+import pl.dom.launcher.ha.summarize
 import pl.dom.launcher.data.TvApp
 import pl.dom.launcher.service.Interaction
 
@@ -57,6 +58,12 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     val scope = rememberCoroutineScope()
 
     val settings by app.settings.flow.collectAsStateWithLifecycle(initialValue = null)
+    val haStates by app.ha.states.collectAsStateWithLifecycle()
+    val haStatus by app.ha.status.collectAsStateWithLifecycle()
+    val haRecent by app.ha.recent.collectAsStateWithLifecycle()
+    val haSummary = remember(haStates, settings?.ha) { settings?.ha?.let { summarize(haStates, it) } }
+    var seenNotifications by remember { mutableStateOf(0L) }
+    var showNotifications by remember { mutableStateOf(false) }
     val apps by app.apps.apps.collectAsStateWithLifecycle()
     val updateState by app.updater.state.collectAsStateWithLifecycle()
     val library by app.media.library.state.collectAsStateWithLifecycle()
@@ -159,7 +166,16 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                 .alpha(uiAlpha)
                 .padding(horizontal = 40.dp, vertical = 22.dp),
         ) {
-            TopBar(onOpenSettings = { showSettings = true })
+            TopBar(
+                onOpenSettings = { showSettings = true },
+                ha = haSummary,
+                haStatus = haStatus,
+                unread = haRecent.count { it.at > seenNotifications },
+                onOpenNotifications = {
+                    showNotifications = true
+                    seenNotifications = System.currentTimeMillis()
+                },
+            )
             Spacer(Modifier.height(14.dp))
 
             if (showSettings) {
@@ -214,6 +230,12 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         }
 
         menu?.let { request -> ActionMenu(request, onDismiss = { menu = null }) }
+        if (showNotifications) NotificationsDialog(haRecent, onDismiss = { showNotifications = false })
+
+        NotificationPopup(
+            app.ha.notifications,
+            Modifier.align(Alignment.TopEnd).padding(top = 70.dp, end = 40.dp),
+        )
 
         if (idle) IdleClock()
     }

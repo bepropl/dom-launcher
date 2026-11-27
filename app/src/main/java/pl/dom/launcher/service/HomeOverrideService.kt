@@ -8,9 +8,14 @@ import android.provider.Settings
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import pl.dom.launcher.MainActivity
+import pl.dom.launcher.LauncherApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 /**
- * Usługa ułatwień dostępu (jak „Override” w Projectivy):
+ * Usługa ułatwień dostępu (jak „Override” w Projectivy), a przy okazji dymki z Home Assistanta nad innymi aplikacjami:
  *  - przycisk Home na pilocie otwiera Dom,
  *  - gdy na ekran wchodzi launcher Google TV (np. po włączeniu telewizora), od razu przykrywa go Dom.
  * Nie czyta zawartości ekranu – dostaje tylko informację, która aplikacja wyszła na wierzch,
@@ -19,6 +24,28 @@ import pl.dom.launcher.MainActivity
 class HomeOverrideService : AccessibilityService() {
 
     private var lastOpenAt = 0L
+    private var scope: CoroutineScope? = null
+    private var overlay: NotificationOverlay? = null
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        val popup = NotificationOverlay(this)
+        overlay = popup
+        // Powiadomienia z Home Assistanta nad innymi aplikacjami (w launcherze pokazuje je sam launcher).
+        scope = MainScope().also { scope ->
+            scope.launch {
+                LauncherApp.from(this@HomeOverrideService).ha.notifications.collect { n ->
+                    if (!AppVisibility.launcherVisible) popup.show(n)
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        scope?.cancel()
+        overlay?.remove()
+        super.onDestroy()
+    }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         if (event.keyCode != KeyEvent.KEYCODE_HOME) return false

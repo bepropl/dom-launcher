@@ -145,8 +145,6 @@ fun StartScreen(
                 )
             } else if (moving != null) {
                 Text("Przesuwasz aplikację: ◀ ▶ zmienia miejsce, OK albo Wstecz zapisuje", fontSize = 10.sp, color = Palette.Amber)
-            } else {
-                Text("Home Assistant: jeszcze niepodłączony (etap 3)", fontSize = 10.sp, color = Palette.Muted)
             }
         }
         Spacer(Modifier.height(10.dp))

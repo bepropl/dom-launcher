@@ -79,4 +79,5 @@ dependencies {
     implementation(libs.nanohttpd)
     implementation(libs.zxing.core)
     implementation(libs.coil.compose)
+    implementation(libs.okhttp)
 }

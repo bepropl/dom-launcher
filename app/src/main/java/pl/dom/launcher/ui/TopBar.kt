@@ -38,9 +38,17 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import pl.dom.launcher.ha.HaStatus
+import pl.dom.launcher.ha.HaSummary
 
 @Composable
-fun TopBar(onOpenSettings: () -> Unit) {
+fun TopBar(
+    onOpenSettings: () -> Unit,
+    ha: HaSummary? = null,
+    haStatus: HaStatus = HaStatus.Off,
+    unread: Int = 0,
+    onOpenNotifications: () -> Unit = {},
+) {
     val now by rememberNow()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(now.format(TimeFormat), fontSize = 32.sp, fontWeight = FontWeight.Light, color = Palette.Text)
@@ -49,18 +57,46 @@ fun TopBar(onOpenSettings: () -> Unit) {
 
         Spacer(Modifier.weight(1f))
 
-        // Dane z Home Assistanta pojawią się w etapie 3.
-        HaInfo(value = "—°", label = "Na zewnątrz")
+        // Dane z Home Assistanta (encje wybierasz na stronie w telefonie).
+        if (ha?.weatherLabel != null) {
+            HaInfo(value = listOfNotNull(ha.weatherIcon, ha.outside).joinToString(" "), label = ha.weatherLabel)
+            Spacer(Modifier.width(18.dp))
+        }
+        if (ha?.weatherLabel == null || ha.outside == null) {
+            HaInfo(value = ha?.outside ?: "—°", label = "Na zewnątrz")
+            Spacer(Modifier.width(18.dp))
+        }
+        HaInfo(value = ha?.inside ?: "—°", label = "W domu")
         Spacer(Modifier.width(18.dp))
-        HaInfo(value = "—°", label = "W domu")
+        HaInfo(
+            value = ha?.peopleHome?.let { "$it/${ha.peopleTotal}" } ?: "—",
+            label = when {
+                ha == null || ha.peopleHome == null -> "Osoby w domu"
+                ha.namesHome.isEmpty() -> "Nikogo w domu"
+                ha.namesHome.size <= 2 -> ha.namesHome.joinToString(", ")
+                else -> "Osoby w domu"
+            },
+        )
         Spacer(Modifier.width(18.dp))
-        HaInfo(value = "—", label = "Osoby w domu")
-        Spacer(Modifier.width(18.dp))
+        if (haStatus !is HaStatus.Connected && haStatus !is HaStatus.Off) {
+            Text(
+                if (haStatus is HaStatus.Connecting) "Łączę z HA…" else "Brak połączenia z HA",
+                fontSize = 8.sp, color = Palette.Muted,
+            )
+            Spacer(Modifier.width(12.dp))
+        }
         Box(Modifier.width(1.dp).height(24.dp).background(Palette.Amber.copy(alpha = 0.25f)))
         Spacer(Modifier.width(14.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            RoundIconButton(Icons.Filled.Notifications, "Powiadomienia") { /* etap 3 */ }
+            Box {
+                RoundIconButton(Icons.Filled.Notifications, "Powiadomienia", onOpenNotifications)
+                if (unread > 0) {
+                    Box(
+                        Modifier.align(Alignment.TopEnd).size(8.dp).background(Palette.Amber, CircleShape),
+                    )
+                }
+            }
             WifiIndicator()
             RoundIconButton(Icons.Filled.Settings, "Ustawienia launchera", onOpenSettings)
         }

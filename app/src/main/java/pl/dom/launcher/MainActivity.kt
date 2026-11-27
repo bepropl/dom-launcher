@@ -9,6 +9,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import pl.dom.launcher.service.Interaction
+import pl.dom.launcher.service.AppVisibility
 import pl.dom.launcher.ui.LauncherScreen
 import pl.dom.launcher.ui.LauncherTheme
 
@@ -36,12 +37,18 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        AppVisibility.launcherVisible = true
         Interaction.touch()
         // Odświeżamy listę aplikacji przy każdym powrocie (np. po instalacji nowej).
         val app = LauncherApp.from(this)
         lifecycleScope.launch { app.apps.refresh() }
         lifecycleScope.launch { app.updater.checkIfDue() }
         lifecycleScope.launch { app.media.refreshIfDue() }
+    }
+
+    override fun onPause() {
+        AppVisibility.launcherVisible = false
+        super.onPause()
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
