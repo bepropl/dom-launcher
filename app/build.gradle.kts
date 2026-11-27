@@ -38,8 +38,7 @@ android {
 
     buildTypes {
         release {
-            // Optymalizacja R8 (szybsze działanie). Na razie tylko w wersji testowej z gałęzi dev
-            // (MINIFY=1 ustawia workflow); wydania OTA z main zostają bez niej, dopóki nie sprawdzimy.
+            // Optymalizacja R8 (szybsze działanie). Włącza ją workflow (MINIFY=1).
             val minify = System.getenv("MINIFY") == "1"
             isMinifyEnabled = minify
             isShrinkResources = minify
