@@ -27,6 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -56,6 +58,12 @@ import pl.dom.launcher.update.UpdateState
 
 @Composable
 fun SettingsScreen(settings: LauncherSettings?) {
+    // Po otwarciu kursor od razu trafia do ustawień (inaczej po zamknięciu panelu zębatki nic nie było zaznaczone).
+    val firstButton = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(400)
+        runCatching { firstButton.requestFocus() }
+    }
     val context = LocalContext.current
     val app = remember { LauncherApp.from(context) }
     val scope = rememberCoroutineScope()
@@ -134,7 +142,7 @@ fun SettingsScreen(settings: LauncherSettings?) {
                 else "Włącz usługę „Dom – ekran główny” w Ułatwieniach dostępu. Wtedy Home i włączenie telewizora zawsze otworzą Dom (jak „Override” w Projectivy).",
                 fontSize = 10.sp, color = if (overrideOn) Palette.Ok else Palette.Soft,
             )
-            Button(onClick = {
+            Button(modifier = Modifier.focusRequester(firstButton), onClick = {
                 runCatching {
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }

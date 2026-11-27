@@ -30,6 +30,11 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.tv.material3.Button
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import pl.dom.launcher.LauncherApp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
@@ -143,11 +148,17 @@ fun StartScreen(
 
         Box(Modifier.fillMaxWidth().padding(horizontal = EdgePadding), contentAlignment = Alignment.Center) {
             if (updateState is UpdateState.Available) {
-                Text(
-                    "Dostępna aktualizacja ${updateState.info.versionName} – zainstalujesz ją w Ustawieniach",
-                    fontSize = 10.sp,
-                    color = Palette.Amber,
-                )
+                // Aktualizację da się zainstalować prosto ze Startu (nie zależy od ekranu ustawień).
+                val app = LauncherApp.from(LocalContext.current)
+                val updateScope = rememberCoroutineScope()
+                Button(onClick = {
+                    if (app.updater.canInstall()) updateScope.launch { app.updater.downloadAndInstall(updateState.info) }
+                    else app.updater.openInstallPermissionSettings()
+                }) {
+                    Text("Zainstaluj aktualizację ${updateState.info.versionName}", fontSize = 10.sp)
+                }
+            } else if (updateState is UpdateState.Downloading) {
+                Text("Pobieram aktualizację… ${(updateState.progress * 100).toInt()}%", fontSize = 10.sp, color = Palette.Amber)
             } else if (moving != null) {
                 Text("Przesuwasz aplikację: ◀ ▶ zmienia miejsce, OK albo Wstecz zapisuje", fontSize = 10.sp, color = Palette.Amber)
             }

@@ -77,8 +77,10 @@ fun SidePanel(visible: Boolean, title: String, items: List<PanelItem>, onClose: 
                     .fillMaxHeight()
                     .width(300.dp)
                     .background(Palette.Card)
+                    // Fokus nie wychodzi z otwartego panelu; zamykany panel niczego już nie trzyma.
                     .focusProperties {
-                        exit = { FocusRequester.Cancel }
+                        canFocus = visible
+                        exit = { if (visible) FocusRequester.Cancel else FocusRequester.Default }
                     }
                     .focusGroup()
                     .onPreviewKeyEvent { e ->
@@ -91,7 +93,10 @@ fun SidePanel(visible: Boolean, title: String, items: List<PanelItem>, onClose: 
                 items.forEachIndexed { index, item ->
                     Surface(
                         onClick = { item.onClick() },
-                        modifier = Modifier.fillMaxWidth().then(if (index == 0) Modifier.focusRequester(first) else Modifier),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusProperties { canFocus = visible }
+                            .then(if (index == 0) Modifier.focusRequester(first) else Modifier),
                         shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(12.dp)),
                         colors = ClickableSurfaceDefaults.colors(
                             containerColor = Color.Transparent,
