@@ -44,7 +44,7 @@ fun AppsScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
+    Column(Modifier.fillMaxSize().padding(top = 12.dp, start = EdgePadding, end = EdgePadding)) {
         Text(
             "OK – uruchom · przytrzymaj OK – dodaj do ekranu Start lub usuń · kolejność ustawisz z telefonu",
             fontSize = 10.sp,

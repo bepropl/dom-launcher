@@ -43,6 +43,7 @@ import pl.dom.launcher.ha.HaSummary
 
 @Composable
 fun TopBar(
+    modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit,
     ha: HaSummary? = null,
     haStatus: HaStatus = HaStatus.Off,
@@ -50,7 +51,7 @@ fun TopBar(
     onOpenNotifications: () -> Unit = {},
 ) {
     val now by rememberNow()
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(now.format(TimeFormat), fontSize = 32.sp, fontWeight = FontWeight.Light, color = Palette.Text)
         Spacer(Modifier.width(11.dp))
         Text(now.polishDate(), fontSize = 12.sp, color = Palette.Muted)

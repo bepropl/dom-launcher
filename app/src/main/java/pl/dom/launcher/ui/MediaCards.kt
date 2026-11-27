@@ -206,10 +206,10 @@ fun SectionTitle(title: String, hint: String? = null) {
 @Composable
 fun MediaRow(title: String, hint: String? = null, content: LazyListScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionTitle(title, hint)
+        Box(Modifier.padding(start = EdgePadding + 4.dp)) { SectionTitle(title, hint) }
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+            contentPadding = PaddingValues(horizontal = EdgePadding + 4.dp, vertical = 6.dp),
             content = content,
         )
     }
@@ -226,13 +226,13 @@ fun MediaGrid(
 ) {
     val spacing = 12.dp
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionTitle(title, hint)
+        Box(Modifier.padding(start = EdgePadding + 4.dp)) { SectionTitle(title, hint) }
         LazyHorizontalGrid(
             rows = GridCells.Fixed(rows),
             modifier = Modifier.fillMaxWidth().height(cellHeight * rows + spacing * (rows - 1) + 16.dp),
             horizontalArrangement = Arrangement.spacedBy(spacing),
             verticalArrangement = Arrangement.spacedBy(spacing),
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = EdgePadding + 4.dp, vertical = 8.dp),
             content = content,
         )
     }
@@ -244,6 +244,7 @@ fun EmptyNote(text: String) {
     Text(
         text,
         modifier = Modifier
+            .padding(horizontal = EdgePadding)
             .background(Palette.Card.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
             .padding(horizontal = 12.dp, vertical = 10.dp),
         fontSize = 10.sp,

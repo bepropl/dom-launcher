@@ -1,5 +1,7 @@
 package pl.dom.launcher.ui
 
+import androidx.compose.ui.unit.dp
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -13,6 +15,9 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /** Kolory z makiety: bursztyn na czerni (OLED). */
+/** Margines od krawędzi ekranu. Rzędy plakatów przewijają się aż do krawędzi (jak w Netflixie). */
+val EdgePadding = 40.dp
+
 object Palette {
     val Bg = Color(0xFF070504)
     val Card = Color(0xFF14100C)

@@ -140,7 +140,7 @@ fun StartScreen(
         // Środek ekranu zostaje pusty – tu widać domek.
         Spacer(Modifier.weight(1f))
 
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().padding(horizontal = EdgePadding), contentAlignment = Alignment.Center) {
             if (updateState is UpdateState.Available) {
                 Text(
                     "Dostępna aktualizacja ${updateState.info.versionName} – zainstalujesz ją w Ustawieniach",
@@ -155,7 +155,7 @@ fun StartScreen(
 
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(13.dp),
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
+            contentPadding = PaddingValues(horizontal = EdgePadding + 6.dp, vertical = 8.dp),
         ) {
             itemsIndexed(shown, key = { _, app -> app.packageName }) { index, app ->
                 val isMoving = app.packageName == moving

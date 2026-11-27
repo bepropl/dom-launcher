@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import android.os.SystemClock
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -193,10 +194,25 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                 .fillMaxSize()
                 .offset { pixelShift }
                 .alpha(uiAlpha)
-                .padding(horizontal = 40.dp, vertical = 22.dp),
+                .padding(vertical = 22.dp),
         ) {
             TopBar(
-                onOpenSettings = { showSettings = true },
+                modifier = Modifier.padding(horizontal = EdgePadding),
+                onOpenSettings = {
+                    menu = MenuRequest(
+                        "Ustawienia",
+                        listOf(
+                            MenuAction("Ustawienia launchera") { showSettings = true },
+                            MenuAction("Ustawienia Androida") {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                    )
+                                }
+                            },
+                        ),
+                    )
+                },
                 ha = haSummary,
                 haStatus = haStatus,
                 unread = haRecent.count { it.at > seenNotifications },
@@ -208,9 +224,11 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
             Spacer(Modifier.height(14.dp))
 
             if (showSettings) {
-                SettingsScreen(settings = settings)
+                Box(Modifier.padding(horizontal = EdgePadding)) { SettingsScreen(settings = settings) }
             } else {
-                MainTabs(tabs = Tabs, selected = tab, onSelect = { tab = it }, focusRequesters = tabFocus)
+                Box(Modifier.padding(horizontal = EdgePadding)) {
+                    MainTabs(tabs = Tabs, selected = tab, onSelect = { tab = it }, focusRequesters = tabFocus)
+                }
                 when (tab) {
                     TAB_START -> StartScreen(
                         favorites = favorites,

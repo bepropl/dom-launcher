@@ -27,6 +27,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -65,10 +73,24 @@ fun SettingsScreen(settings: LauncherSettings?) {
     val url = ip?.let { "http://$it:${ConfigServer.PORT}/#pin=$pin" }
     val qr = remember(url) { url?.let { qrBitmap(it, 480) } }
 
+    // Góra ustawień (kod QR i PIN) nie ma nic do zaznaczenia, więc sama by się nie przewinęła.
+    // Gdy kursor wychodzi z ustawień w górę (albo nie ma już dokąd), wracamy na samą górę.
+    val scroll = rememberScrollState()
+    val scrollScope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .onFocusChanged { if (!it.hasFocus) scrollScope.launch { scroll.animateScrollTo(0) } }
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.DirectionUp && event.type == KeyEventType.KeyDown) {
+                    if (!focusManager.moveFocus(FocusDirection.Up)) scrollScope.launch { scroll.animateScrollTo(0) }
+                    true
+                } else {
+                    false
+                }
+            }
+            .verticalScroll(scroll)
             .padding(top = 6.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {

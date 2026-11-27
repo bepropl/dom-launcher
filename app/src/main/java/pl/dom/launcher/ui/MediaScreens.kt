@@ -219,6 +219,7 @@ private fun TmdbPoster(item: MediaItem, actions: MediaActions, width: Dp = Poste
 private fun Hero(item: MediaItem, actions: MediaActions) {
     Box(
         Modifier
+            .padding(horizontal = EdgePadding)
             .fillMaxWidth()
             .height(150.dp)
             .clip(RoundedCornerShape(12.dp))

@@ -138,10 +138,10 @@ private fun DetailContent(
     val onList = library.isOnWatchlist(item.type, item.tmdbId)
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 48.dp, end = 48.dp, top = 64.dp, bottom = 24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 64.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(Modifier.width(520.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(Modifier.padding(start = EdgePadding + 8.dp).width(520.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
             item.provider?.let { Text("W serwisie $it", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Palette.Amber) }
             Text(item.title, fontSize = 30.sp, fontWeight = FontWeight.Medium, color = Palette.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val meta = listOfNotNull(
@@ -170,7 +170,7 @@ private fun DetailContent(
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp, start = EdgePadding + 8.dp)) {
             Button(onClick = { actions.watch(item.provider, item.title) }, modifier = Modifier.focusRequester(mainButton)) {
                 Text(item.provider?.let { "▶  Oglądaj w $it" } ?: "▶  Oglądaj", fontSize = 11.sp)
             }
@@ -223,8 +223,8 @@ private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-        SectionTitle("Sezony i odcinki", "OK na odcinku – oznacz, że obejrzane do tego miejsca")
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp)) {
+        Box(Modifier.padding(start = EdgePadding + 4.dp)) { SectionTitle("Sezony i odcinki", "OK na odcinku – oznacz, że obejrzane do tego miejsca") }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = EdgePadding + 4.dp, vertical = 4.dp)) {
             items(numbers, key = { "season-$it" }) { n ->
                 val selected = n == season
                 if (selected) {
@@ -236,9 +236,9 @@ private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
         }
         val list = episodes
         when {
-            list == null -> Text("Wczytuję odcinki…", fontSize = 10.sp, color = Palette.Muted)
-            list.isEmpty() -> Text("Brak listy odcinków.", fontSize = 10.sp, color = Palette.Muted)
-            else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)) {
+            list == null -> Text("Wczytuję odcinki…", fontSize = 10.sp, color = Palette.Muted, modifier = Modifier.padding(start = EdgePadding + 4.dp))
+            list.isEmpty() -> Text("Brak listy odcinków.", fontSize = 10.sp, color = Palette.Muted, modifier = Modifier.padding(start = EdgePadding + 4.dp))
+            else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = EdgePadding + 4.dp, vertical = 6.dp)) {
                 items(list, key = { "ep-${it.season}-${it.number}" }) { ep ->
                     val seen = watched != null && Episode(ep.season, ep.number) <= watched
                     val aired = ep.airDate?.let { it <= java.time.LocalDate.now().toString() } ?: false
