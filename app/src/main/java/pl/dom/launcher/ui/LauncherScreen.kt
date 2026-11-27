@@ -149,6 +149,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
             Modifier.fillMaxSize(),
             dim = if (idle) 0.55f else 1f,
             mode = settings?.houseMode ?: HouseMode.FULL,
+            showHouse = tab == TAB_START && !showSettings,
         )
 
         Column(

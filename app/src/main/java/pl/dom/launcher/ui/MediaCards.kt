@@ -17,6 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridScope
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -38,8 +41,11 @@ import coil.compose.AsyncImage
 
 val WideCardWidth = 160.dp
 val WideCardHeight = 90.dp
-val PosterWidth = 82.dp
-val PosterHeight = 123.dp
+val PosterWidth = 100.dp
+val PosterHeight = 150.dp
+/** Duże plakaty filmów (zakładka Filmy, dwa rzędy). */
+val BigPosterWidth = 124.dp
+val BigPosterHeight = 186.dp
 
 private val MediaShape = RoundedCornerShape(8.dp)
 
@@ -117,14 +123,16 @@ fun PosterCard(
     imageUrl: String?,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
+    width: Dp = PosterWidth,
+    height: Dp = PosterHeight,
 ) {
-    MediaCardFrame(Modifier.size(PosterWidth, PosterHeight), onClick, onLongClick) {
+    MediaCardFrame(Modifier.size(width, height), onClick, onLongClick) {
         Box(Modifier.fillMaxSize().background(placeholderColor(title))) {
             if (imageUrl != null) {
                 AsyncImage(model = imageUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             } else {
                 Text(
-                    title, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text,
+                    title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text,
                     modifier = Modifier.align(Alignment.BottomStart).padding(6.dp), maxLines = 3,
                 )
             }
@@ -190,6 +198,29 @@ fun MediaRow(title: String, hint: String? = null, content: LazyListScope.() -> U
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
+            content = content,
+        )
+    }
+}
+
+/** Kilka rzędów plakatów przewijanych w bok (np. seriale w trzech rzędach, filmy w dwóch). */
+@Composable
+fun MediaGrid(
+    title: String,
+    hint: String? = null,
+    rows: Int,
+    cellHeight: Dp,
+    content: LazyGridScope.() -> Unit,
+) {
+    val spacing = 12.dp
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionTitle(title, hint)
+        LazyHorizontalGrid(
+            rows = GridCells.Fixed(rows),
+            modifier = Modifier.fillMaxWidth().height(cellHeight * rows + spacing * (rows - 1) + 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
             content = content,
         )
     }

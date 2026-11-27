@@ -10,6 +10,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import android.os.SystemClock
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -45,8 +54,27 @@ class MediaActions(
     private val menu: (MenuRequest) -> Unit,
 ) {
     private val media get() = app.media
+    @Volatile private var menuOpenedAt = 0L
 
+    /** Po przytrzymaniu OK karta nie może się jeszcze „kliknąć” przy puszczeniu przycisku. */
+    private fun justOpenedMenu() = SystemClock.uptimeMillis() - menuOpenedAt < 1200
+
+    private fun showMenu(request: MenuRequest) {
+        menuOpenedAt = SystemClock.uptimeMillis()
+        menu(request)
+    }
+
+    /** OK na karcie. */
     fun openProvider(provider: String?, title: String) {
+        if (!justOpenedMenu()) launchProvider(provider, title)
+    }
+
+    /** OK na karcie z Emby. */
+    fun openEmby() {
+        if (!justOpenedMenu()) launchEmby()
+    }
+
+    private fun launchProvider(provider: String?, title: String) {
         val target = provider?.let { app.apps.findByName(it) }
         when {
             target != null -> app.apps.launch(target.packageName)
@@ -55,7 +83,7 @@ class MediaActions(
         }
     }
 
-    fun openEmby() {
+    private fun launchEmby() {
         val emby = app.apps.findByName("Emby")
         if (emby != null) app.apps.launch(emby.packageName) else toast("Nie znalazłem aplikacji Emby na telewizorze")
     }
@@ -70,11 +98,11 @@ class MediaActions(
 
     fun menuForShow(show: FollowedShow) {
         val next = show.nextToWatch
-        menu(
+        showMenu(
             MenuRequest(
                 show.name,
                 buildList {
-                    add(MenuAction(show.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { openProvider(show.provider, show.name) })
+                    add(MenuAction(show.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { launchProvider(show.provider, show.name) })
                     if (next != null && show.hasNewEpisode) {
                         add(MenuAction("Oznacz ${next.code} jako obejrzany") {
                             run("Oznaczono ${next.code} jako obejrzany") { media.markNextWatched(show.tmdbId) }
@@ -94,11 +122,11 @@ class MediaActions(
     }
 
     fun menuForWatchItem(item: WatchItem) {
-        menu(
+        showMenu(
             MenuRequest(
                 item.title,
                 buildList {
-                    add(MenuAction(item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { openProvider(item.provider, item.title) })
+                    add(MenuAction(item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { launchProvider(item.provider, item.title) })
                     if (item.type == MediaType.TV) {
                         add(MenuAction("Obserwuj serial (od początku)") {
                             run("Obserwujecie „${item.title}”") { media.follow(item.tmdbId, caughtUp = false) }
@@ -114,11 +142,11 @@ class MediaActions(
 
     fun menuForItem(item: MediaItem) {
         val lib = media.library.state.value
-        menu(
+        showMenu(
             MenuRequest(
                 item.title,
                 buildList {
-                    add(MenuAction(item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { openProvider(item.provider, item.title) })
+                    add(MenuAction(item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { launchProvider(item.provider, item.title) })
                     if (lib.isOnWatchlist(item.type, item.tmdbId)) {
                         add(MenuAction("Usuń z „Do obejrzenia”") { run("Usunięto z listy") { media.removeFromWatchlist(item.type, item.tmdbId) } })
                     } else {
@@ -138,7 +166,7 @@ class MediaActions(
     }
 
     fun menuForEmby(item: EmbyItem) {
-        menu(MenuRequest(item.title, listOf(MenuAction("Otwórz Emby") { openEmby() })))
+        showMenu(MenuRequest(item.title, listOf(MenuAction("Otwórz Emby") { launchEmby() })))
     }
 }
 
@@ -146,6 +174,10 @@ class MediaActions(
 @Composable
 fun ActionMenu(request: MenuRequest, onDismiss: () -> Unit) {
     val first = remember { FocusRequester() }
+    // Menu otwiera się, gdy OK jest jeszcze wciśnięte. Puszczenie tego OK nie może
+    // „kliknąć” pierwszej opcji – przyjmujemy wybór dopiero po nowym naciśnięciu OK.
+    var armed by remember(request) { mutableStateOf(false) }
+    val openedAt = remember(request) { SystemClock.uptimeMillis() }
     LaunchedEffect(request) {
         delay(50)
         runCatching { first.requestFocus() }
@@ -153,6 +185,14 @@ fun ActionMenu(request: MenuRequest, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Column(
             Modifier
+                .onPreviewKeyEvent { event ->
+                    val ok = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+                    if (!ok) return@onPreviewKeyEvent false
+                    if (event.type == KeyEventType.KeyDown && event.nativeKeyEvent.repeatCount == 0 && SystemClock.uptimeMillis() - openedAt > 150) {
+                        armed = true
+                    }
+                    !armed
+                }
                 .width(280.dp)
                 .background(Palette.Card, RoundedCornerShape(12.dp))
                 .padding(14.dp),
@@ -162,8 +202,10 @@ fun ActionMenu(request: MenuRequest, onDismiss: () -> Unit) {
             request.actions.forEachIndexed { index, action ->
                 Button(
                     onClick = {
-                        onDismiss()
-                        action.action()
+                        if (armed) {
+                            onDismiss()
+                            action.action()
+                        }
                     },
                     modifier = Modifier
                         .fillMaxWidth()

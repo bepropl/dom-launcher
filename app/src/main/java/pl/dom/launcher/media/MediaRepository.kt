@@ -168,7 +168,7 @@ class MediaRepository(
         val out = LinkedHashMap<Int, MediaItem>()
         val max = lists.maxOfOrNull { it.size } ?: 0
         for (i in 0 until max) for (list in lists) list.getOrNull(i)?.let { out.putIfAbsent(it.tmdbId, it) }
-        return out.values.take(24)
+        return out.values.take(48)
     }
 
     companion object {

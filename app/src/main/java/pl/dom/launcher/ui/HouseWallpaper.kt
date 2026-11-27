@@ -33,7 +33,7 @@ object HouseLights {
  * a gdy launcher jest w tle albo ekran wyłączony – nie rysuje nic.
  */
 @Composable
-fun HouseWallpaper(modifier: Modifier = Modifier, dim: Float = 1f, mode: HouseMode = HouseMode.FULL) {
+fun HouseWallpaper(modifier: Modifier = Modifier, dim: Float = 1f, mode: HouseMode = HouseMode.FULL, showHouse: Boolean = true) {
     if (mode == HouseMode.OFF) {
         Box(modifier)
         return
@@ -43,6 +43,7 @@ fun HouseWallpaper(modifier: Modifier = Modifier, dim: Float = 1f, mode: HouseMo
     val lights by HouseLights.rooms.collectAsState()
 
     renderer.dim = dim
+    renderer.showHouse = showHouse
     renderer.detail = if (mode == HouseMode.ECO) 0.5f else 1f
     LaunchedEffect(lights) { renderer.roomTargets = lights.copyOf() }
 

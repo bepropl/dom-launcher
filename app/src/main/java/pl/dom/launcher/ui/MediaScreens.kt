@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -146,8 +148,10 @@ fun MoviesScreen(feeds: Feeds, actions: MediaActions) {
         Problems(feeds)
         feeds.movies.firstOrNull()?.let { Hero(it, actions) }
         if (feeds.movies.size > 1) {
-            MediaRow("Polecane w Waszych serwisach") {
-                items(feeds.movies.drop(1), key = { "m-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
+            MediaGrid("Polecane w Waszych serwisach", rows = 2, cellHeight = BigPosterHeight) {
+                gridItems(feeds.movies.drop(1), key = { "m-${it.tmdbId}" }) { item ->
+                    TmdbPoster(item, actions, BigPosterWidth, BigPosterHeight)
+                }
             }
         } else if (feeds.loading) {
             EmptyNote("Wczytuję…")
@@ -183,8 +187,8 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
             }
         }
         if (feeds.shows.isNotEmpty()) {
-            MediaRow("Popularne w Waszych serwisach", "Przytrzymaj OK, żeby obserwować") {
-                items(feeds.shows, key = { "s-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
+            MediaGrid("Popularne w Waszych serwisach", "Przytrzymaj OK, żeby obserwować", rows = 3, cellHeight = PosterHeight) {
+                gridItems(feeds.shows, key = { "s-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
             }
         } else if (feeds.loading) {
             EmptyNote("Wczytuję…")
@@ -199,8 +203,10 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
 }
 
 @Composable
-private fun TmdbPoster(item: MediaItem, actions: MediaActions) {
+private fun TmdbPoster(item: MediaItem, actions: MediaActions, width: Dp = PosterWidth, height: Dp = PosterHeight) {
     PosterCard(
+        width = width,
+        height = height,
         title = item.title,
         label = item.provider,
         imageUrl = TmdbImages.poster(item.posterPath),

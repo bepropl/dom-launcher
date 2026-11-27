@@ -67,9 +67,19 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     @Volatile var detail = 1f
     /** Docelowa jasność świateł w pokojach 0..1, indeks = numer pokoju. */
     @Volatile var roomTargets = FloatArray(HouseRooms.COUNT)
-    /** Wielkość i pionowe przesunięcie domku na ekranie. */
-    @Volatile var scale = 1.85f
-    @Volatile var offsetY = -0.17f
+    /** Wielkość i położenie domku na ekranie (offsetX/offsetY w jednostkach ekranu, -1..1). */
+    @Volatile var scale = 2.0f
+    @Volatile var offsetX = 0.5f
+    @Volatile var offsetY = 0f
+    /** Domek widać tylko na ekranie Start; na innych zakładkach zostają same cząstki. */
+    @Volatile var showHouse = true
+
+    private var houseAlpha = 1f
+    private var dustAlpha = 0.5f
+    private var dustProgram = 0
+    private var dustVbo = 0
+    private var dustCount = 0
+    private var dAttr = 0; private var dTime = 0; private var dPointScale = 0; private var dAlpha = 0
 
     private val rooms = FloatArray(HouseRooms.COUNT)
     private var program = 0
@@ -81,7 +91,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     private val startNanos = System.nanoTime()
 
     private var uTime = 0; private var uAng = 0; private var uPit = 0; private var uAsp = 0
-    private var uPointScale = 0; private var uScale = 0; private var uOff = 0; private var uDim = 0; private var uRooms = 0
+    private var uPointScale = 0; private var uScale = 0; private var uOff = 0; private var uOffX = 0; private var uDim = 0; private var uRooms = 0
     private var aPos = 0; private var aAttr = 0
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -96,6 +106,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         uPointScale = GLES20.glGetUniformLocation(program, "ps")
         uScale = GLES20.glGetUniformLocation(program, "sc")
         uOff = GLES20.glGetUniformLocation(program, "off")
+        uOffX = GLES20.glGetUniformLocation(program, "offx")
         uDim = GLES20.glGetUniformLocation(program, "dim")
         uRooms = GLES20.glGetUniformLocation(program, "rm")
 
@@ -105,6 +116,25 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo)
         model.data.position(0)
         GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, model.count * HouseModel.FLOATS_PER_POINT * 4, model.data, GLES20.GL_STATIC_DRAW)
+
+        // Cząstki unoszące się po całym ekranie (stałe ziarno – zawsze ten sam układ).
+        dustProgram = buildProgram(DUST_VERTEX_SHADER, FRAGMENT_SHADER)
+        dAttr = GLES20.glGetAttribLocation(dustProgram, "d")
+        dTime = GLES20.glGetUniformLocation(dustProgram, "t")
+        dPointScale = GLES20.glGetUniformLocation(dustProgram, "ps")
+        dAlpha = GLES20.glGetUniformLocation(dustProgram, "al")
+        dustCount = DUST_COUNT
+        val random = java.util.Random(7)
+        val dust = ByteBuffer.allocateDirect(dustCount * 4 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        repeat(dustCount) {
+            val size = random.nextFloat()
+            dust.put(random.nextFloat()).put(random.nextFloat()).put(random.nextFloat()).put(size * size)
+        }
+        dust.position(0)
+        GLES20.glGenBuffers(1, ids, 0)
+        dustVbo = ids[0]
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, dustVbo)
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, dustCount * 4 * 4, dust, GLES20.GL_STATIC_DRAW)
 
         GLES20.glDisable(GLES20.GL_DEPTH_TEST)
         GLES20.glEnable(GLES20.GL_BLEND)
@@ -129,16 +159,37 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         val targets = roomTargets
         for (i in rooms.indices) rooms[i] += (targets.getOrElse(i) { 0f } - rooms[i]) * min(1f, dt * 4f)
 
+        // Płynne pojawianie się i znikanie domku przy zmianie zakładki.
+        val houseTarget = if (showHouse) 1f else 0f
+        houseAlpha += (houseTarget - houseAlpha) * min(1f, dt * 3f)
+        val dustTarget = if (showHouse) 0.45f else 1f
+        dustAlpha += (dustTarget - dustAlpha) * min(1f, dt * 3f)
+        val time = (now - startNanos) / 1e9f
+
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+
+        GLES20.glUseProgram(dustProgram)
+        GLES20.glUniform1f(dTime, time)
+        GLES20.glUniform1f(dPointScale, height / 1080f)
+        GLES20.glUniform1f(dAlpha, dustAlpha * dim)
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, dustVbo)
+        GLES20.glEnableVertexAttribArray(dAttr)
+        GLES20.glVertexAttribPointer(dAttr, 4, GLES20.GL_FLOAT, false, 16, 0)
+        GLES20.glDrawArrays(GLES20.GL_POINTS, 0, (dustCount * detail.coerceIn(0.1f, 1f)).toInt())
+        GLES20.glDisableVertexAttribArray(dAttr)
+
+        if (houseAlpha < 0.01f) return
+
         GLES20.glUseProgram(program)
-        GLES20.glUniform1f(uTime, (now - startNanos) / 1e9f)
+        GLES20.glUniform1f(uTime, time)
         GLES20.glUniform1f(uAng, angle)
         GLES20.glUniform1f(uPit, 0.24f)
         GLES20.glUniform1f(uAsp, width.toFloat() / height)
         GLES20.glUniform1f(uPointScale, height / 1080f)
         GLES20.glUniform1f(uScale, scale)
         GLES20.glUniform1f(uOff, offsetY)
-        GLES20.glUniform1f(uDim, dim)
+        GLES20.glUniform1f(uOffX, offsetX)
+        GLES20.glUniform1f(uDim, dim * houseAlpha)
         GLES20.glUniform1fv(uRooms, HouseRooms.COUNT, rooms, 0)
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo)
@@ -149,6 +200,8 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         GLES20.glVertexAttribPointer(aAttr, 4, GLES20.GL_FLOAT, false, stride, 12)
         val points = (model.count * detail.coerceIn(0.1f, 1f)).toInt()
         GLES20.glDrawArrays(GLES20.GL_POINTS, 0, points)
+        GLES20.glDisableVertexAttribArray(aPos)
+        GLES20.glDisableVertexAttribArray(aAttr)
     }
 
     private fun buildProgram(vs: String, fs: String): Int {
@@ -175,7 +228,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         val VERTEX_SHADER = """
             attribute vec3 p;
             attribute vec4 a;
-            uniform float t, ang, pit, asp, ps, sc, off, dim;
+            uniform float t, ang, pit, asp, ps, sc, off, offx, dim;
             uniform float rm[12];
             varying float va;
             varying vec3 vc;
@@ -199,8 +252,30 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
                 else if (a.x < 1.5) { va = lit * tw; vc = vec3(1., .86, .6); }
                 else { va = .25 * tw; vc = vec3(1., .6, .25); }
                 va *= dim;
-                gl_Position = vec4(q.x * sc / asp, q.y * sc + off * (-q.z), 0., -q.z);
+                gl_Position = vec4(q.x * sc / asp + offx * (-q.z), q.y * sc + off * (-q.z), 0., -q.z);
                 gl_PointSize = (a.x > .5 && a.x < 1.5 ? 2.7 : 2.2) * ps * (sc / 3.) * 28. / (-q.z);
+            }
+        """.trimIndent()
+
+        const val DUST_COUNT = 900
+
+        /** d = (x, y, ziarno, wielkość); pozycje w 0..1, przesuwają się powoli i zawijają przy brzegach. */
+        val DUST_VERTEX_SHADER = """
+            attribute vec4 d;
+            uniform float t, ps, al;
+            varying float va;
+            varying vec3 vc;
+            void main() {
+                vec2 q = d.xy + vec2(
+                    sin(t * .05 + d.z * 20.) * .03 + t * .003 * (d.z - .5),
+                    t * .010 * (.35 + d.z)
+                );
+                q = fract(q) * 2. - 1.;
+                float tw = .55 + .45 * sin(t * (.6 + d.z) + d.z * 50.);
+                va = al * tw * (.22 + .4 * d.w);
+                vc = mix(vec3(1., .56, .16), vec3(1., .85, .6), d.w);
+                gl_Position = vec4(q, 0., 1.);
+                gl_PointSize = (1.8 + 3.2 * d.w) * ps;
             }
         """.trimIndent()
 
