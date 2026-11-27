@@ -40,6 +40,7 @@ import pl.dom.launcher.data.TvApp
 import pl.dom.launcher.update.UpdateState
 import pl.dom.launcher.media.Feeds
 import pl.dom.launcher.media.Library
+import pl.dom.launcher.media.MediaType
 import pl.dom.launcher.media.TmdbImages
 import androidx.compose.foundation.lazy.items
 
@@ -52,6 +53,8 @@ fun StartScreen(
     onLaunch: (TvApp) -> Unit,
     onOpenAllApps: () -> Unit,
     onReorder: (List<String>) -> Unit,
+    autoFocus: Boolean = false,
+    onAutoFocused: () -> Unit = {},
     library: Library,
     feeds: Feeds,
     actions: MediaActions,
@@ -59,10 +62,11 @@ fun StartScreen(
 ) {
     val firstApp = remember { FocusRequester() }
     // Po starcie fokus ląduje na pierwszej aplikacji, a nie w menu.
-    LaunchedEffect(favorites.isNotEmpty()) {
-        if (favorites.isNotEmpty()) {
+    LaunchedEffect(autoFocus, favorites.isNotEmpty()) {
+        if (autoFocus && favorites.isNotEmpty()) {
             delay(150)
             runCatching { firstApp.requestFocus() }
+            onAutoFocused()
         }
     }
 
@@ -111,7 +115,7 @@ fun StartScreen(
             items(shows, key = { "show-${it.tmdbId}" }) { show ->
                 WideMediaCard(
                     title = show.name, subtitle = show.cardSubtitle(), imageUrl = TmdbImages.backdrop(show.backdropPath),
-                    onClick = { actions.openProvider(show.provider, show.name) }, onLongClick = { actions.menuForShow(show) },
+                    onClick = { actions.openProvider(show.provider, show.name) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
                 )
             }

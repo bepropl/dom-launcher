@@ -96,11 +96,11 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Problems(feeds)
-        MediaRow("Dalej", "Seriale, w których czeka nowy odcinek") {
+        MediaRow("Dalej", "OK – oglądaj, przytrzymaj OK – szczegóły") {
             items(next, key = { "show-${it.tmdbId}" }) { show ->
                 WideMediaCard(
                     title = show.name, subtitle = show.cardSubtitle(), imageUrl = TmdbImages.backdrop(show.backdropPath),
-                    onClick = { actions.openProvider(show.provider, show.name) }, onLongClick = { actions.menuForShow(show) },
+                    onClick = { actions.openProvider(show.provider, show.name) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
                 )
             }
@@ -108,13 +108,13 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
         }
         if (next.isEmpty() && feeds.embyResume.isEmpty()) EmptyNote("Nic nie czeka. Obserwuj seriale w zakładce Seriale albo na stronie w telefonie.")
 
-        MediaRow("Lista do obejrzenia", "Przytrzymaj OK, żeby usunąć lub oznaczyć jako obejrzane") {
+        MediaRow("Lista do obejrzenia", "OK – szczegóły, przytrzymaj OK – szybkie opcje") {
             items(library.watchlist, key = { "w-${it.type}-${it.tmdbId}" }) { item ->
                 PosterCard(
                     title = item.title,
                     label = listOfNotNull(if (item.type == MediaType.MOVIE) "Film" else "Serial", item.provider).joinToString(" · "),
                     imageUrl = TmdbImages.poster(item.posterPath),
-                    onClick = { actions.openProvider(item.provider, item.title) },
+                    onClick = { actions.detail(item.type, item.tmdbId) },
                     onLongClick = { actions.menuForWatchItem(item) },
                 )
             }
@@ -128,7 +128,7 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
                         title = show.name,
                         subtitle = listOfNotNull(show.provider, show.waitingText()).joinToString(" · "),
                         imageUrl = TmdbImages.poster(show.posterPath),
-                        onClick = { actions.openProvider(show.provider, show.name) },
+                        onClick = { actions.detail(MediaType.TV, show.tmdbId) },
                         onLongClick = { actions.menuForShow(show) },
                     )
                 }
@@ -174,20 +174,20 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
     ) {
         Problems(feeds)
         if (library.shows.isNotEmpty()) {
-            MediaRow("Obserwowane", "Przytrzymaj OK – oznacz obejrzane lub przestań obserwować") {
+            MediaRow("Obserwowane", "OK – szczegóły i odcinki") {
                 items(library.shows, key = { "f-${it.tmdbId}" }) { show ->
                     PosterCard(
                         title = show.name,
                         label = if (show.hasNewEpisode) "${show.unwatchedCount} nowe" else show.provider,
                         imageUrl = TmdbImages.poster(show.posterPath),
-                        onClick = { actions.openProvider(show.provider, show.name) },
+                        onClick = { actions.detail(MediaType.TV, show.tmdbId) },
                         onLongClick = { actions.menuForShow(show) },
                     )
                 }
             }
         }
         if (feeds.shows.isNotEmpty()) {
-            MediaGrid("Popularne w Waszych serwisach", "Przytrzymaj OK, żeby obserwować", rows = 3, cellHeight = PosterHeight) {
+            MediaGrid("Popularne w Waszych serwisach", "OK – szczegóły i zwiastun", rows = 3, cellHeight = PosterHeight) {
                 gridItems(feeds.shows, key = { "s-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
             }
         } else if (feeds.loading) {
@@ -210,7 +210,7 @@ private fun TmdbPoster(item: MediaItem, actions: MediaActions, width: Dp = Poste
         title = item.title,
         label = item.provider,
         imageUrl = TmdbImages.poster(item.posterPath),
-        onClick = { actions.openProvider(item.provider, item.title) },
+        onClick = { actions.detail(item.type, item.tmdbId) },
         onLongClick = { actions.menuForItem(item) },
     )
 }
@@ -250,7 +250,7 @@ private fun Hero(item: MediaItem, actions: MediaActions) {
                 Button(onClick = { actions.openProvider(item.provider, item.title) }) {
                     Text(item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj", fontSize = 10.sp)
                 }
-                OutlinedButton(onClick = { actions.menuForItem(item) }) { Text("Więcej", fontSize = 10.sp) }
+                OutlinedButton(onClick = { actions.detail(item.type, item.tmdbId) }) { Text("Więcej", fontSize = 10.sp) }
             }
         }
     }

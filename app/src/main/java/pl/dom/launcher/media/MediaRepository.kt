@@ -88,6 +88,16 @@ class MediaRepository(
 
     suspend fun search(text: String): List<MediaItem> = withContext(Dispatchers.IO) { tmdb.search(text) }
 
+    /** Szczegóły do ekranu podglądu, z serwisem, w którym tytuł jest dostępny. */
+    suspend fun details(type: MediaType, tmdbId: Int): MediaDetails = withContext(Dispatchers.IO) {
+        val details = tmdb.details(type, tmdbId)
+        val mine = settings.current().providers
+        val provider = runCatching { tmdb.providerFor(type, tmdbId, mine) }.getOrNull()
+        details.copy(item = details.item.copy(provider = provider))
+    }
+
+    suspend fun season(tmdbId: Int, season: Int): List<SeasonEpisode> = withContext(Dispatchers.IO) { tmdb.season(tmdbId, season) }
+
     suspend fun providers(): List<StreamingProvider> = withContext(Dispatchers.IO) { tmdb.providers() }
 
     /** Dodaje serial do obserwowanych. caughtUp = jesteście na bieżąco (obejrzane do ostatniego odcinka). */

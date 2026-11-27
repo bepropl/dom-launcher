@@ -34,6 +34,9 @@ import kotlinx.coroutines.launch
 import pl.dom.launcher.LauncherApp
 import pl.dom.launcher.media.EmbyItem
 import pl.dom.launcher.media.FollowedShow
+import pl.dom.launcher.media.Episode
+import pl.dom.launcher.media.MediaDetails
+import pl.dom.launcher.media.SeasonEpisode
 import pl.dom.launcher.media.MediaItem
 import pl.dom.launcher.media.MediaType
 import pl.dom.launcher.media.WatchItem
@@ -52,6 +55,7 @@ class MediaActions(
     private val scope: CoroutineScope,
     private val toast: (String) -> Unit,
     private val menu: (MenuRequest) -> Unit,
+    private val openDetail: (DetailRequest) -> Unit = {},
 ) {
     private val media get() = app.media
     @Volatile private var menuOpenedAt = 0L
@@ -72,6 +76,57 @@ class MediaActions(
     /** OK na karcie z Emby. */
     fun openEmby() {
         if (!justOpenedMenu()) launchEmby()
+    }
+
+    /** OK na plakacie – podgląd tytułu na cały ekran. */
+    fun detail(type: MediaType, tmdbId: Int) {
+        if (!justOpenedMenu()) openDetail(DetailRequest(type, tmdbId))
+    }
+
+    /** Przycisk „Oglądaj” w podglądzie: aplikacja serwisu, jeśli się da – od razu z wyszukanym tytułem. */
+    fun watch(provider: String?, title: String) {
+        val target = provider?.let { app.apps.findByName(it) }
+        if (target != null && app.apps.launchSearch(target.packageName, title)) return
+        launchProvider(provider, title)
+    }
+
+    fun follow(tmdbId: Int, title: String, caughtUp: Boolean) =
+        run("Obserwujecie „$title”") { media.follow(tmdbId, caughtUp = caughtUp) }
+
+    fun unfollow(tmdbId: Int, title: String) =
+        run("Usunięto „$title” z obserwowanych") { media.unfollow(tmdbId) }
+
+    fun toggleWatchlist(type: MediaType, tmdbId: Int, title: String, onList: Boolean) =
+        if (onList) run("Usunięto „$title” z listy") { media.removeFromWatchlist(type, tmdbId) }
+        else run("Dodano „$title” do listy") { media.addToWatchlist(type, tmdbId) }
+
+    /** OK na odcinku w podglądzie serialu. */
+    fun menuForEpisode(d: MediaDetails, ep: SeasonEpisode) {
+        val code = Episode(ep.season, ep.number).code
+        val followed = media.library.state.value.isFollowed(d.item.tmdbId)
+        showMenu(
+            MenuRequest(
+                "${d.item.title} · $code ${ep.name}",
+                buildList {
+                    add(MenuAction("Obejrzane do $code (włącznie)") {
+                        run("Zapisano: obejrzane do $code") {
+                            if (!followed) media.follow(d.item.tmdbId, caughtUp = false)
+                            media.setWatched(d.item.tmdbId, ep.season, ep.number)
+                        }
+                    })
+                    if (followed) {
+                        val prev = if (ep.number > 1) Episode(ep.season, ep.number - 1) else null
+                        add(MenuAction(prev?.let { "Obejrzane do ${it.code} (bez tego odcinka)" } ?: "Ten sezon jeszcze nieobejrzany") {
+                            run("Zapisano") {
+                                if (prev != null) media.setWatched(d.item.tmdbId, prev.season, prev.number)
+                                else media.setWatched(d.item.tmdbId, ep.season - 1, if (ep.season > 1) d.seasons[ep.season - 1] ?: 0 else 0)
+                            }
+                        })
+                    }
+                    add(MenuAction(d.item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { watch(d.item.provider, d.item.title) })
+                },
+            ),
+        )
     }
 
     private fun launchProvider(provider: String?, title: String) {

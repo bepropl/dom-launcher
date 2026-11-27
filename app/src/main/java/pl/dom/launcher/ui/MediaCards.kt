@@ -22,6 +22,10 @@ import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +53,11 @@ val BigPosterHeight = 186.dp
 
 private val MediaShape = RoundedCornerShape(8.dp)
 
+/** Ostatnio wybrana karta – po zamknięciu podglądu fokus wraca dokładnie na nią. */
+object FocusMemory {
+    var last: FocusRequester? = null
+}
+
 /** Spokojne, ciemne tło zastępcze, gdy nie ma obrazka (kolor zależy od tytułu). */
 private fun placeholderColor(seed: String): Color {
     val palette = listOf(0xFF1B1430, 0xFF14202C, 0xFF2A1610, 0xFF102020, 0xFF241016, 0xFF1A1F12)
@@ -62,10 +71,13 @@ private fun MediaCardFrame(
     onLongClick: (() -> Unit)?,
     content: @Composable () -> Unit,
 ) {
+    val requester = remember { FocusRequester() }
     Card(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier,
+        modifier = modifier
+            .focusRequester(requester)
+            .onFocusChanged { if (it.isFocused) FocusMemory.last = requester },
         shape = CardDefaults.shape(shape = MediaShape),
         colors = CardDefaults.colors(containerColor = Palette.Card, focusedContainerColor = Palette.Card),
         scale = CardDefaults.scale(focusedScale = 1.06f),

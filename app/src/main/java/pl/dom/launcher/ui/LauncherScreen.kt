@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.key
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,17 +74,24 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
     // Przycisk Home zawsze wraca na Start.
+    // Fokus na pierwszą aplikację tylko po starcie, po Home i po Wstecz – nie przy każdym
+    // przejściu przez zakładkę Start w menu (to „szarpało” menu).
+    var focusStartApps by remember { mutableStateOf(true) }
     val goHome by goHomeSignal.collectAsStateWithLifecycle()
     LaunchedEffect(goHome) {
         tab = TAB_START
         showSettings = false
+        focusStartApps = true
     }
 
     // Wstecz: z ustawień i innych zakładek wraca na Start; na Starcie nic nie robi (to ekran główny).
     BackHandler(enabled = true) {
         when {
             showSettings -> showSettings = false
-            tab != TAB_START -> tab = TAB_START
+            tab != TAB_START -> {
+                tab = TAB_START
+                focusStartApps = true
+            }
         }
     }
 
@@ -143,7 +151,28 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     }
 
     var menu by remember { mutableStateOf<MenuRequest?>(null) }
-    val actions = remember { MediaActions(app, scope, toast = { toast = it }, menu = { menu = it }) }
+    // Podgląd tytułu (jak w Netflixie). Stos: z „Podobne” można wchodzić głębiej, Wstecz wraca.
+    var detailStack by remember { mutableStateOf(listOf<DetailRequest>()) }
+    var returnFocus by remember { mutableStateOf<FocusRequester?>(null) }
+    val actions = remember {
+        MediaActions(app, scope, toast = { toast = it }, menu = { menu = it }, openDetail = { request ->
+            if (detailStack.isEmpty()) returnFocus = FocusMemory.last
+            detailStack = detailStack + request
+        })
+    }
+    // Home zamyka też podgląd tytułu.
+    LaunchedEffect(goHome) {
+        detailStack = emptyList()
+        returnFocus = null
+    }
+    LaunchedEffect(detailStack.isEmpty()) {
+        if (detailStack.isEmpty()) {
+            val target = returnFocus ?: return@LaunchedEffect
+            delay(80)
+            runCatching { target.requestFocus() }
+            returnFocus = null
+        }
+    }
 
     // Kafelek „Wszystkie” przenosi fokus na zakładkę Aplikacje. Gdyby fokus po prostu zniknął
     // razem z kafelkiem, trafiłby na pierwszą zakładkę (Start) i ekran od razu by wrócił.
@@ -156,7 +185,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
             Modifier.fillMaxSize(),
             dim = if (idle) 0.55f else 1f,
             mode = settings?.houseMode ?: HouseMode.FULL,
-            showHouse = tab == TAB_START && !showSettings,
+            showHouse = tab == TAB_START && !showSettings && detailStack.isEmpty(),
         )
 
         Column(
@@ -185,6 +214,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                 when (tab) {
                     TAB_START -> StartScreen(
                         favorites = favorites,
+                        autoFocus = focusStartApps,
+                        onAutoFocused = { focusStartApps = false },
                         onLaunch = { app.apps.launch(it.packageName) },
                         onReorder = { packages ->
                             scope.launch {
@@ -225,6 +256,19 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     fontSize = 12.sp,
                     color = Palette.Text,
+                )
+            }
+        }
+
+        detailStack.lastOrNull()?.let { request ->
+            key(request) {
+                DetailScreen(
+                    request = request,
+                    app = app,
+                    library = library,
+                    actions = actions,
+                    onOpen = { next -> detailStack = detailStack + next },
+                    onClose = { detailStack = detailStack.dropLast(1) },
                 )
             }
         }

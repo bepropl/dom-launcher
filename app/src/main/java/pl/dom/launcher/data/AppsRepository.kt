@@ -56,6 +56,20 @@ class AppsRepository(private val context: Context) {
             }
     }
 
+    /**
+     * Próbuje otworzyć aplikację od razu z wyszukiwaniem tytułu (jeśli ją to obsługuje – globalne
+     * wyszukiwanie Android TV). Gdy nie – zwraca false i wtedy otwieramy aplikację normalnie.
+     */
+    fun launchSearch(packageName: String, query: String): Boolean {
+        val intent = Intent(Intent.ACTION_SEARCH)
+            .setPackage(packageName)
+            .putExtra(android.app.SearchManager.QUERY, query)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val handler = context.packageManager.queryIntentActivities(intent, 0).firstOrNull() ?: return false
+        if (!handler.activityInfo.exported) return false
+        return runCatching { context.startActivity(intent) }.isSuccess
+    }
+
     fun launch(packageName: String): Boolean {
         val intent = pm.getLeanbackLaunchIntentForPackage(packageName)
             ?: pm.getLaunchIntentForPackage(packageName)

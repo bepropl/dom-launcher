@@ -10,6 +10,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -39,7 +42,16 @@ fun HouseWallpaper(modifier: Modifier = Modifier, dim: Float = 1f, mode: HouseMo
         return
     }
     val context = LocalContext.current
-    val renderer = remember { HouseRenderer(HouseModel.load(context.applicationContext)) }
+    // Model (1,2 MB) wczytuje się w tle – start launchera się nie zacina.
+    val model by produceState<HouseModel?>(null) {
+        value = withContext(Dispatchers.IO) { runCatching { HouseModel.load(context.applicationContext) }.getOrNull() }
+    }
+    val loaded = model
+    if (loaded == null) {
+        Box(modifier)
+        return
+    }
+    val renderer = remember(loaded) { HouseRenderer(loaded) }
     val lights by HouseLights.rooms.collectAsState()
 
     renderer.dim = dim

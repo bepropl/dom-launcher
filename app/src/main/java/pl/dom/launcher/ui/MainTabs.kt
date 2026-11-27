@@ -5,6 +5,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -27,6 +34,15 @@ fun MainTabs(
     onSelect: (Int) -> Unit,
     focusRequesters: List<FocusRequester>,
 ) {
+    // Zakładka przełącza się dopiero, gdy kursor zatrzyma się na niej na chwilę –
+    // przelatywanie przez menu (albo „szarpnięcia” fokusu przy starcie) niczego nie przełącza.
+    var pending by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(pending) {
+        val target = pending ?: return@LaunchedEffect
+        delay(220)
+        if (target != selected) onSelect(target)
+        pending = null
+    }
     TabRow(
         selectedTabIndex = selected,
         modifier = Modifier
@@ -36,8 +52,10 @@ fun MainTabs(
         tabs.forEachIndexed { index, title ->
             Tab(
                 selected = index == selected,
-                onFocus = { onSelect(index) },
-                modifier = Modifier.focusRequester(focusRequesters[index]),
+                onFocus = { pending = index },
+                modifier = Modifier
+                    .focusRequester(focusRequesters[index])
+                    .onFocusChanged { if (!it.isFocused && pending == index) pending = null },
             ) {
                 Text(
                     text = title,

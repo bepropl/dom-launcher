@@ -50,6 +50,57 @@ class Tmdb(private val key: () -> String?) {
         )
     }
 
+    fun details(type: MediaType, id: Int): MediaDetails {
+        val o = get(
+            if (type == MediaType.MOVIE) "/movie/$id" else "/tv/$id",
+            mapOf("append_to_response" to "videos,recommendations,credits", "include_video_language" to "pl,en,null"),
+        )
+        val videos = o.optJSONObject("videos")?.optJSONArray("results").mapObjects { v ->
+            if (v.optString("site") == "YouTube") v else null
+        }
+        fun rank(v: JSONObject): Int {
+            val typeRank = when (v.optString("type")) { "Trailer" -> 0; "Teaser" -> 2; else -> 4 }
+            val langRank = when (v.optString("iso_639_1")) { "pl" -> 0; "en" -> 1; else -> 2 }
+            return typeRank * 3 + langRank
+        }
+        val trailer = videos.filter { it.optString("type") in setOf("Trailer", "Teaser") }.minByOrNull(::rank)
+            ?: videos.firstOrNull()
+        return MediaDetails(
+            item = parseItem(o, type),
+            tagline = o.optString("tagline").takeIf { it.isNotBlank() },
+            genres = o.optJSONArray("genres").mapObjects { it.optString("name").takeIf { n -> n.isNotBlank() } },
+            runtime = o.optInt("runtime", 0).takeIf { it > 0 },
+            seasons = if (type == MediaType.TV) o.optJSONArray("seasons").mapObjects { s ->
+                val number = s.optInt("season_number")
+                val count = s.optInt("episode_count")
+                if (number > 0 && count > 0) number to count else null
+            }.toMap() else emptyMap(),
+            trailerKey = trailer?.optString("key")?.takeIf { it.isNotBlank() },
+            recommendations = o.optJSONObject("recommendations")?.optJSONArray("results")
+                .mapObjects { r ->
+                    when (r.optString("media_type")) {
+                        "movie" -> parseItem(r, MediaType.MOVIE)
+                        "tv" -> parseItem(r, MediaType.TV)
+                        else -> parseItem(r, type)
+                    }
+                }.take(20),
+            cast = o.optJSONObject("credits")?.optJSONArray("cast").mapObjects { it.optString("name").takeIf { n -> n.isNotBlank() } }.take(6),
+        )
+    }
+
+    fun season(id: Int, season: Int): List<SeasonEpisode> =
+        get("/tv/$id/season/$season").optJSONArray("episodes").mapObjects { e ->
+            SeasonEpisode(
+                season = season,
+                number = e.optInt("episode_number"),
+                name = e.optString("name"),
+                airDate = e.optStringOrNull("air_date"),
+                overview = e.optString("overview"),
+                stillPath = e.optStringOrNull("still_path"),
+                runtime = e.optInt("runtime", 0).takeIf { it > 0 },
+            )
+        }
+
     fun item(type: MediaType, id: Int): MediaItem =
         parseItem(get(if (type == MediaType.MOVIE) "/movie/$id" else "/tv/$id"), type)
 

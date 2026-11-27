@@ -41,6 +41,9 @@ internal const val CONFIG_PAGE = """<!doctype html>
   .room { display: flex; gap: 8px; align-items: center; }
   .room span { flex: 0 0 42%; font-size: 14px; }
   .room select { margin-bottom: 6px; }
+  input.filter { padding: 8px 10px; font-size: 14px; margin-bottom: 4px; }
+  .room { flex-wrap: wrap; }
+  .room input.filter { flex: 1 1 100%; }
   .checks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .checks label { display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.15); color: #F4EBDD; font-size: 15px; }
   .checks input { width: auto; margin: 0; }
@@ -366,18 +369,44 @@ internal const val CONFIG_PAGE = """<!doctype html>
       .catch(function (e) { el("provMsg").textContent = e.message; });
   }
   var haPolls = 0;
-  function fillSelect(id, items, value, emptyLabel) {
-    var sel = el(id);
+  function normalize(t) {
+    return (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l");
+  }
+  function renderOptions(sel) {
+    var items = sel._items, value = sel.value || sel._initial || "", q = normalize(sel._filter ? sel._filter.value : "");
     sel.textContent = "";
-    var none = node("option", "", emptyLabel || "— brak —"); none.value = ""; sel.appendChild(none);
+    var none = node("option", "", sel._empty || "— brak —"); none.value = ""; sel.appendChild(none);
+    var shown = 0;
     items.forEach(function (it) {
+      var match = !q || normalize(it.name).indexOf(q) >= 0 || normalize(it.id).indexOf(q) >= 0;
+      if (!match && it.id !== value) return;
       var o = node("option", "", it.name + "  (" + it.state + ")"); o.value = it.id;
       if (it.id === value) o.selected = true;
       sel.appendChild(o);
+      if (match) shown++;
     });
     if (value && !items.some(function (it) { return it.id === value; })) {
       var missing = node("option", "", value + " (nie znaleziono)"); missing.value = value; missing.selected = true; sel.appendChild(missing);
     }
+    if (q && sel._filter) sel._filter.title = shown + " pasujących";
+  }
+  function fillSelect(id, items, value, emptyLabel) {
+    var sel = el(id);
+    sel._items = items;
+    sel._initial = value || "";
+    sel._empty = emptyLabel;
+    if (!sel._filter) {
+      var f = node("input");
+      f.type = "search";
+      f.className = "filter";
+      f.placeholder = "Szukaj (np. salon)…";
+      f.setAttribute("aria-label", "Filtruj listę");
+      f.oninput = function () { renderOptions(sel); };
+      sel.parentNode.insertBefore(f, sel);
+      sel._filter = f;
+    }
+    renderOptions(sel);
+    sel._initial = "";
   }
   function loadHa() {
     api("/api/ha").then(function (h) {
