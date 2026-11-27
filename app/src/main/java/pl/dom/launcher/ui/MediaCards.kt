@@ -137,6 +137,7 @@ fun PosterCard(
     onLongClick: (() -> Unit)? = null,
     width: Dp = PosterWidth,
     height: Dp = PosterHeight,
+    labelStrong: Boolean = false,
 ) {
     MediaCardFrame(Modifier.size(width, height), onClick, onLongClick) {
         Box(Modifier.fillMaxSize().background(placeholderColor(title))) {
@@ -148,7 +149,7 @@ fun PosterCard(
                     modifier = Modifier.align(Alignment.BottomStart).padding(6.dp), maxLines = 3,
                 )
             }
-            if (label != null) Badge(label, strong = false, modifier = Modifier.align(Alignment.TopStart).padding(4.dp))
+            if (label != null) Badge(label, strong = labelStrong, modifier = Modifier.align(Alignment.TopStart).padding(4.dp))
         }
     }
 }

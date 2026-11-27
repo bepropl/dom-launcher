@@ -39,14 +39,15 @@ import pl.dom.launcher.media.Library
 import pl.dom.launcher.media.MediaItem
 import pl.dom.launcher.media.MediaType
 import pl.dom.launcher.media.TmdbImages
+import pl.dom.launcher.media.ToWatch
 
 /** Seriale z nowymi odcinkami – najświeższe na początku. */
 fun Library.showsWithNewEpisodes(): List<FollowedShow> =
-    shows.filter { it.hasNewEpisode }.sortedByDescending { it.lastAired?.airDate ?: "" }
+    shows.filter { it.started && it.hasNewEpisode }.sortedByDescending { it.lastAired?.airDate ?: "" }
 
 /** Seriale, z którymi jesteście na bieżąco – najbliższa premiera na początku. */
 fun Library.showsWaiting(): List<FollowedShow> =
-    shows.filterNot { it.hasNewEpisode }.sortedBy { it.nextAir?.airDate ?: "9999" }
+    shows.filter { it.started && !it.hasNewEpisode }.sortedBy { it.nextAir?.airDate ?: "9999" }
 
 fun FollowedShow.cardSubtitle(): String {
     val next = nextToWatch
@@ -108,18 +109,22 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
         }
         if (next.isEmpty() && feeds.embyResume.isEmpty()) EmptyNote("Nic nie czeka. Obserwuj seriale w zakładce Seriale albo na stronie w telefonie.")
 
-        MediaRow("Lista do obejrzenia", "OK – szczegóły, przytrzymaj OK – szybkie opcje") {
-            items(library.watchlist, key = { "w-${it.type}-${it.tmdbId}" }) { item ->
-                PosterCard(
-                    title = item.title,
-                    label = listOfNotNull(if (item.type == MediaType.MOVIE) "Film" else "Serial", item.provider).joinToString(" · "),
-                    imageUrl = TmdbImages.poster(item.posterPath),
-                    onClick = { actions.detail(item.type, item.tmdbId) },
-                    onLongClick = { actions.menuForWatchItem(item) },
-                )
+        val toWatch = library.toWatch()
+        val ready = toWatch.filter { it.ready }.sortedWith(compareByDescending<ToWatch> { it.isNew }.thenByDescending { it.newSince }.thenByDescending { it.addedAt })
+        val upcoming = toWatch.filterNot { it.ready }.sortedWith(
+            compareBy<ToWatch> { it.released }.thenBy { it.releaseDate ?: "9999" }.thenBy { it.title.lowercase() },
+        )
+        if (ready.isNotEmpty()) {
+            MediaRow("Gotowe do oglądania", "Niezaczęte, już w Waszych serwisach · OK – szczegóły") {
+                items(ready, key = { "r-${it.type}-${it.tmdbId}" }) { entry -> ToWatchPoster(entry, actions) }
             }
         }
-        if (library.watchlist.isEmpty()) EmptyNote("Lista jest pusta. Dodasz do niej filmy i seriale przytrzymaniem OK w zakładkach Filmy i Seriale.")
+        if (upcoming.isNotEmpty()) {
+            MediaRow("Czekamy", "Premiera albo jeszcze nie ma w Waszych serwisach – sprawdzam codziennie") {
+                items(upcoming, key = { "u-${it.type}-${it.tmdbId}" }) { entry -> ToWatchPoster(entry, actions) }
+            }
+        }
+        if (toWatch.isEmpty()) EmptyNote("Lista jest pusta. Dodasz do niej filmy i seriale w podglądzie tytułu („+ Do obejrzenia”) albo na stronie w telefonie.")
 
         if (waiting.isNotEmpty()) {
             MediaRow("Czekacie na nowe odcinki", "Jesteście na bieżąco") {
@@ -200,6 +205,26 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
         }
         Spacer(Modifier.height(20.dp))
     }
+}
+
+@Composable
+private fun ToWatchPoster(entry: ToWatch, actions: MediaActions) {
+    val kind = if (entry.type == MediaType.MOVIE) "Film" else "Serial"
+    val (label, strong) = when {
+        entry.ready && entry.isNew -> "Nowe na ${entry.provider}" to true
+        entry.ready -> listOfNotNull(kind, entry.provider).joinToString(" · ") to false
+        !entry.released -> "Premiera ${friendlyDate(entry.releaseDate) ?: ""}".trim() to false
+        entry.provider != null -> "Nie w Waszych serwisach · jest na ${entry.provider}" to false
+        else -> "Jeszcze nie w Waszych serwisach" to false
+    }
+    PosterCard(
+        title = entry.title,
+        label = label,
+        labelStrong = strong,
+        imageUrl = TmdbImages.poster(entry.posterPath),
+        onClick = { actions.detail(entry.type, entry.tmdbId) },
+        onLongClick = { actions.menuForToWatch(entry) },
+    )
 }
 
 @Composable

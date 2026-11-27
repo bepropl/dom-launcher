@@ -162,7 +162,7 @@ private fun DetailContent(
                 Text(
                     when {
                         show.hasNewEpisode && next != null -> "Następny do obejrzenia: ${next.code} (${show.unwatchedCount} czeka)"
-                        show.watched.season == 0 -> "Obserwujecie – jeszcze nic nie obejrzane"
+                        !show.started -> "Jeszcze nie zaczęte – jest na liście „Do obejrzenia”"
                         else -> "Obejrzane do ${show.watched.code}"
                     },
                     fontSize = 10.sp, color = Palette.Amber,

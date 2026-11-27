@@ -22,7 +22,12 @@ data class MediaItem(
     val rating: Double?,
     /** Serwis, w którym jest dostępny (jeśli wiemy). */
     val provider: String? = null,
+    /** Data premiery RRRR-MM-DD (film: kinowa, serial: pierwszy odcinek). */
+    val releaseDate: String? = null,
 )
+
+/** Gdzie można obejrzeć tytuł: serwis (Wasz, a jak nie – jakikolwiek) i czy to jeden z Waszych. */
+data class Availability(val provider: String?, val mine: Boolean)
 
 /** Szczegóły serialu potrzebne do liczenia, co oglądać dalej. */
 data class TvDetails(
@@ -35,6 +40,7 @@ data class TvDetails(
     val lastAired: Episode?,
     val nextAir: Episode?,
     val ended: Boolean,
+    val firstAirDate: String? = null,
 )
 
 object TmdbImages {

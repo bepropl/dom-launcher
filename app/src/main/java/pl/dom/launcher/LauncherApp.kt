@@ -38,6 +38,9 @@ class LauncherApp : Application() {
         updater = Updater(this)
         media = MediaRepository(this, settings, secrets)
         ha = HomeAssistant(settings, secrets, scope).also { it.start() }
+        media.onNews = { title, message ->
+            ha.show(pl.dom.launcher.ha.HaNotification(title = title, message = message, seconds = 12))
+        }
     }
 
     companion object {

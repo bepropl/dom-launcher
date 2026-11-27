@@ -39,6 +39,10 @@ class MediaRepository(
     private val _feeds = MutableStateFlow(Feeds())
     val feeds: StateFlow<Feeds> = _feeds.asStateFlow()
 
+    /** Wiadomość na telewizor, gdy coś z listy pojawi się w Waszym serwisie (podpina LauncherApp). */
+    @Volatile var onNews: ((title: String, message: String) -> Unit)? = null
+    @Volatile private var availabilityCheckedThisRun = false
+
     private val refreshLock = Mutex()
     @Volatile private var lastRefreshAt = 0L
 
@@ -62,6 +66,8 @@ class MediaRepository(
                 library.state.value.shows.forEach { show ->
                     runCatching { tmdb.tvDetails(show.tmdbId) }.onSuccess { d -> updateShowDetails(d) }
                 }
+                // Lista „Do obejrzenia”: przy starcie launchera i potem raz na 24 h.
+                runCatching { checkAvailability(s.providers) }
                 if (s.providers.isEmpty()) {
                     problems += "Zaznacz swoje serwisy streamingowe na stronie konfiguracji w telefonie."
                 } else {
@@ -102,9 +108,10 @@ class MediaRepository(
 
     /** Dodaje serial do obserwowanych. caughtUp = jesteście na bieżąco (obejrzane do ostatniego odcinka). */
     suspend fun follow(tmdbId: Int, caughtUp: Boolean = true) {
-        val (details, provider) = withContext(Dispatchers.IO) {
-            tmdb.tvDetails(tmdbId) to runCatching { tmdb.providerFor(MediaType.TV, tmdbId, settings.current().providers) }.getOrNull()
+        val (details, availability) = withContext(Dispatchers.IO) {
+            tmdb.tvDetails(tmdbId) to (runCatching { tmdb.availability(MediaType.TV, tmdbId, settings.current().providers) }.getOrNull() ?: Availability(null, false))
         }
+        val provider = availability.provider
         library.update { lib ->
             if (lib.isFollowed(tmdbId)) return@update lib
             val show = FollowedShow(
@@ -119,6 +126,9 @@ class MediaRepository(
                 nextAir = details.nextAir,
                 ended = details.ended,
                 updatedAt = System.currentTimeMillis(),
+                firstAirDate = details.firstAirDate,
+                mine = availability.mine,
+                checkedAt = System.currentTimeMillis(),
             )
             lib.copy(shows = lib.shows + show, watchlist = lib.watchlist.filterNot { it.type == MediaType.TV && it.tmdbId == tmdbId })
         }
@@ -137,13 +147,17 @@ class MediaRepository(
 
     suspend fun addToWatchlist(type: MediaType, tmdbId: Int) {
         if (library.state.value.isOnWatchlist(type, tmdbId)) return
-        val (item, provider) = withContext(Dispatchers.IO) {
-            tmdb.item(type, tmdbId) to runCatching { tmdb.providerFor(type, tmdbId, settings.current().providers) }.getOrNull()
+        val (item, availability) = withContext(Dispatchers.IO) {
+            tmdb.item(type, tmdbId) to (runCatching { tmdb.availability(type, tmdbId, settings.current().providers) }.getOrNull() ?: Availability(null, false))
         }
+        val now = System.currentTimeMillis()
         library.update { lib ->
             if (lib.isOnWatchlist(type, tmdbId)) lib
             else lib.copy(
-                watchlist = lib.watchlist + WatchItem(tmdbId, type, item.title, item.posterPath, item.backdropPath, provider, System.currentTimeMillis()),
+                watchlist = lib.watchlist + WatchItem(
+                    tmdbId, type, item.title, item.posterPath, item.backdropPath, availability.provider, now,
+                    releaseDate = item.releaseDate, mine = availability.mine, checkedAt = now,
+                ),
             )
         }
     }
@@ -158,9 +172,58 @@ class MediaRepository(
             else s.copy(
                 name = d.name, posterPath = d.posterPath ?: s.posterPath, backdropPath = d.backdropPath ?: s.backdropPath,
                 seasons = d.seasons, lastAired = d.lastAired, nextAir = d.nextAir, ended = d.ended,
-                updatedAt = System.currentTimeMillis(),
+                updatedAt = System.currentTimeMillis(), firstAirDate = d.firstAirDate ?: s.firstAirDate,
             )
         })
+    }
+
+    /**
+     * Sprawdza w TMDB, czy pozycje z listy „Do obejrzenia” są już w Waszych serwisach.
+     * Gdy coś stało się gotowe do oglądania (pojawiło się w serwisie albo nadszedł dzień premiery),
+     * dostaje znaczek „Nowe na …” i wysyłamy dymek na telewizor.
+     */
+    private suspend fun checkAvailability(providers: List<StreamingProvider>) {
+        if (providers.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val day = 24 * 3600_000L
+        val due = library.state.value.toWatch().filter { !availabilityCheckedThisRun || now - checkedAtOf(it) > day }
+        availabilityCheckedThisRun = true
+        val today = java.time.LocalDate.now().toString()
+        fun released(date: String?, at: Long): Boolean {
+            if (date == null) return true
+            val then = if (at > 0) java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString() else today
+            return date <= then
+        }
+        for (entry in due) {
+            val av = runCatching { tmdb.availability(entry.type, entry.tmdbId, providers) }.getOrNull() ?: continue
+            val checkedAt = checkedAtOf(entry)
+            val wasReady = entry.mine && released(entry.releaseDate, checkedAt)
+            val isReady = av.mine && released(entry.releaseDate, now)
+            val becameReady = isReady && !wasReady
+            library.update { lib ->
+                if (entry.followed) {
+                    lib.copy(shows = lib.shows.map { s ->
+                        if (s.tmdbId != entry.tmdbId) s
+                        else s.copy(provider = av.provider, mine = av.mine, checkedAt = now, newSince = if (becameReady) now else s.newSince)
+                    })
+                } else {
+                    lib.copy(watchlist = lib.watchlist.map { w ->
+                        if (w.tmdbId != entry.tmdbId || w.type != entry.type) w
+                        else w.copy(provider = av.provider, mine = av.mine, checkedAt = now, newSince = if (becameReady) now else w.newSince)
+                    })
+                }
+            }
+            if (becameReady) {
+                val what = if (entry.type == MediaType.MOVIE) "Film" else "Serial"
+                onNews?.invoke("Nowe na ${av.provider}", "$what „${entry.title}” jest już do obejrzenia na ${av.provider}.")
+            }
+        }
+    }
+
+    private fun checkedAtOf(entry: ToWatch): Long {
+        val lib = library.state.value
+        return if (entry.followed) lib.shows.firstOrNull { it.tmdbId == entry.tmdbId }?.checkedAt ?: 0
+        else lib.watchlist.firstOrNull { it.tmdbId == entry.tmdbId && it.type == entry.type }?.checkedAt ?: 0
     }
 
     @Volatile private var embyClient: Pair<String, Emby>? = null

@@ -47,6 +47,7 @@ class Tmdb(private val key: () -> String?) {
             lastAired = o.optJSONObject("last_episode_to_air")?.let(::parseEpisode),
             nextAir = o.optJSONObject("next_episode_to_air")?.let(::parseEpisode),
             ended = o.optString("status") in setOf("Ended", "Canceled"),
+            firstAirDate = o.optStringOrNull("first_air_date"),
         )
     }
 
@@ -118,12 +119,15 @@ class Tmdb(private val key: () -> String?) {
         ).optJSONArray("results").mapObjects { parseItem(it, type).copy(provider = provider.name) }
 
     /** W którym z Waszych serwisów jest dany tytuł (abonament, Polska). */
-    fun providerFor(type: MediaType, id: Int, mine: List<StreamingProvider>): String? {
+    fun providerFor(type: MediaType, id: Int, mine: List<StreamingProvider>): String? = availability(type, id, mine).provider
+
+    fun availability(type: MediaType, id: Int, mine: List<StreamingProvider>): Availability {
         val path = if (type == MediaType.MOVIE) "/movie/$id/watch/providers" else "/tv/$id/watch/providers"
         val flatrate = get(path).optJSONObject("results")?.optJSONObject(REGION)?.optJSONArray("flatrate")
         val available = flatrate.mapObjects { it.optInt("provider_id") to it.optString("provider_name") }
         val mineIds = mine.map { it.id }.toSet()
-        return (available.firstOrNull { it.first in mineIds } ?: available.firstOrNull())?.second
+        val ours = available.firstOrNull { it.first in mineIds }
+        return if (ours != null) Availability(ours.second, true) else Availability(available.firstOrNull()?.second, false)
     }
 
     /** Lista serwisów streamingowych dostępnych w Polsce (do wyboru na stronie w telefonie). */
@@ -146,6 +150,7 @@ class Tmdb(private val key: () -> String?) {
         year = (if (type == MediaType.MOVIE) o.optString("release_date") else o.optString("first_air_date")).take(4).ifBlank { null },
         overview = o.optString("overview"),
         rating = o.optDouble("vote_average").takeIf { !it.isNaN() && it > 0 },
+        releaseDate = (if (type == MediaType.MOVIE) o.optString("release_date") else o.optString("first_air_date")).ifBlank { null },
     )
 
     private fun parseEpisode(o: JSONObject) =

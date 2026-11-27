@@ -40,6 +40,7 @@ import pl.dom.launcher.media.SeasonEpisode
 import pl.dom.launcher.media.MediaItem
 import pl.dom.launcher.media.MediaType
 import pl.dom.launcher.media.WatchItem
+import pl.dom.launcher.media.ToWatch
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -171,6 +172,38 @@ class MediaActions(
                         }
                     }
                     add(MenuAction("Przestań obserwować") { run("Usunięto „${show.name}” z obserwowanych") { media.unfollow(show.tmdbId) } })
+                },
+            ),
+        )
+    }
+
+    /** Przytrzymanie OK na pozycji z listy „Do obejrzenia”. */
+    fun menuForToWatch(entry: ToWatch) {
+        showMenu(
+            MenuRequest(
+                entry.title,
+                buildList {
+                    if (entry.ready) add(MenuAction("Oglądaj w ${entry.provider}") { launchProvider(entry.provider, entry.title) })
+                    add(MenuAction("Szczegóły i zwiastun") { openDetail(DetailRequest(entry.type, entry.tmdbId)) })
+                    if (entry.type == MediaType.TV) {
+                        add(MenuAction("Zaczęliśmy – obejrzane S01E01") {
+                            run("„${entry.title}” przechodzi do „Dalej”") {
+                                if (!entry.followed) media.follow(entry.tmdbId, caughtUp = false)
+                                media.setWatched(entry.tmdbId, 1, 1)
+                                media.removeFromWatchlist(MediaType.TV, entry.tmdbId)
+                            }
+                        })
+                    } else {
+                        add(MenuAction("Obejrzany – usuń z listy") {
+                            run("Usunięto „${entry.title}” z listy") { media.removeFromWatchlist(entry.type, entry.tmdbId) }
+                        })
+                    }
+                    add(MenuAction(if (entry.followed) "Usuń z listy (przestań obserwować)" else "Usuń z listy") {
+                        run("Usunięto „${entry.title}” z listy") {
+                            if (entry.followed) media.unfollow(entry.tmdbId)
+                            media.removeFromWatchlist(entry.type, entry.tmdbId)
+                        }
+                    })
                 },
             ),
         )
