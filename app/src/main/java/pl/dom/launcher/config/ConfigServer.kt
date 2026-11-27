@@ -12,6 +12,7 @@ import pl.dom.launcher.data.SecretStore
 import pl.dom.launcher.data.StreamingProvider
 import pl.dom.launcher.media.Episode
 import pl.dom.launcher.ha.HaNotification
+import pl.dom.launcher.ha.HaConfig
 import pl.dom.launcher.ha.HaState
 import pl.dom.launcher.ha.HaStatus
 import pl.dom.launcher.house.HouseRooms
@@ -57,28 +58,33 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
         return when {
             get && session.uri == "/api/state" -> json(Response.Status.OK, state())
             post && session.uri == "/api/save" -> {
-                save(body(session))
-                refreshMedia()
-                app.ha.reconnect()
+                val b = body(session)
+                save(b)
+                // Seriale/Emby i Home Assistant odświeżamy tylko, gdy zmieniło się coś, co ich dotyczy.
+                val secrets = b.optJSONObject("secrets")
+                if (b.has("embyUrl") || secrets?.has(SecretStore.EMBY_KEY) == true || secrets?.has(SecretStore.TMDB_KEY) == true) refreshMedia()
+                if (b.has("haUrl") || secrets?.has(SecretStore.HA_TOKEN) == true) app.ha.reconnect()
                 ok()
             }
             get && session.uri == "/api/ha" -> json(Response.Status.OK, haInfo())
             post && session.uri == "/api/ha/config" -> {
+                // Zapis od razu po zmianie: przychodzą tylko zmienione pola.
                 val b = body(session)
                 fun pick(name: String) = b.optString(name, "").takeIf { it.isNotBlank() && it != "null" }
-                val persons = b.optJSONArray("persons")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty()
-                val roomsJson = b.optJSONObject("rooms") ?: JSONObject()
-                val rooms = roomsJson.keys().asSequence().mapNotNull { key ->
-                    val entity = roomsJson.optString(key).takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    key.toIntOrNull()?.let { it to entity }
-                }.toMap()
                 runBlocking {
-                    app.settings.updateHaConfig {
-                        it.copy(weather = pick("weather"), outsideTemp = pick("outsideTemp"), insideTemp = pick("insideTemp"), persons = persons, rooms = rooms)
+                    app.settings.updateHaConfig { c ->
+                        c.copy(
+                            weather = if (b.has("weather")) pick("weather") else c.weather,
+                            outsideTemp = if (b.has("outsideTemp")) pick("outsideTemp") else c.outsideTemp,
+                            insideTemp = if (b.has("insideTemp")) pick("insideTemp") else c.insideTemp,
+                            persons = b.optJSONArray("persons")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: c.persons,
+                            rooms = b.optJSONObject("rooms")?.let { HaConfig.parseRooms(it) } ?: c.rooms,
+                        )
                     }
                 }
                 ok()
             }
+            get && session.uri == "/api/status" -> json(Response.Status.OK, status())
             post && session.uri == "/api/ha/trust" -> {
                 val fingerprint = body(session).optString("fingerprint").takeIf { it.isNotBlank() }
                 runBlocking { app.settings.updateHaConfig { it.copy(certSha256 = fingerprint) } }
@@ -140,6 +146,26 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
     /** Po zmianach odświeża rzędy na telewizorze w tle. */
     private fun refreshMedia() {
         app.scope.launch { runCatching { app.media.refresh() } }
+    }
+
+    /** Przegląd: wersja i stan połączeń (zielone/czerwone kropki na stronie). */
+    private fun status(): JSONObject = runBlocking {
+        val s = app.settings.current()
+        val lib = app.media.library.state.value
+        val tmdb = app.media.testTmdb()
+        val emby = if (s.embyUrl.isBlank()) "Nie skonfigurowano" else app.media.testEmby()
+        JSONObject()
+            .put("version", pl.dom.launcher.BuildConfig.VERSION_NAME)
+            .put("ha", haStatusJson())
+            .put("tmdb", JSONObject().put("ok", tmdb == null).put("message", tmdb ?: "Działa"))
+            .put("emby", JSONObject().put("ok", emby == null).put("message", emby ?: "Działa"))
+            .put("providers", s.providers.size)
+            .put("shows", lib.shows.size)
+            .put("watchlist", lib.toWatch().size)
+            .put("update", when (val u = app.updater.state.value) {
+                is pl.dom.launcher.update.UpdateState.Available -> "Dostępna wersja " + u.info.versionName + " – zainstalujesz ją z panelu zębatki na telewizorze"
+                else -> JSONObject.NULL
+            })
     }
 
     private fun haStatusJson(): JSONObject {

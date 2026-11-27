@@ -120,7 +120,7 @@ class HomeAssistant(
             settings.flow.map { it.ha }.distinctUntilChanged().collect { c ->
                 watched = buildSet {
                     c.weather?.let(::add); c.outsideTemp?.let(::add); c.insideTemp?.let(::add)
-                    addAll(c.persons); addAll(c.rooms.values)
+                    addAll(c.persons); c.rooms.values.forEach { addAll(it) }
                 }
                 publishWatched()
             }
@@ -129,8 +129,9 @@ class HomeAssistant(
         scope.launch {
             combine(states, settings.flow.map { it.ha.rooms }.distinctUntilChanged()) { current, rooms ->
                 FloatArray(HouseRooms.COUNT).also { levels ->
-                    rooms.forEach { (room, entity) ->
-                        if (room in levels.indices) levels[room] = lightLevel(current[entity])
+                    rooms.forEach { (room, entities) ->
+                        // Pokój świeci, gdy którekolwiek z jego świateł jest włączone (najjaśniejsze wygrywa).
+                        if (room in levels.indices) levels[room] = entities.maxOfOrNull { lightLevel(current[it]) } ?: 0f
                     }
                 }
             }.distinctUntilChanged { a, b -> a.contentEquals(b) }.collect { HouseLights.rooms.value = it }

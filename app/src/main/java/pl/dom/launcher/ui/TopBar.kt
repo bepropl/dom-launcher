@@ -100,7 +100,10 @@ fun TopBar(
         // Ikony są osiągalne tylko strzałką w górę – strzałka w bok z menu czy z rzędów się na nich zatrzymuje.
         Row(
             modifier = Modifier
-                .focusProperties { enter = { if (it == FocusDirection.Up) FocusRequester.Default else FocusRequester.Cancel } }
+                .focusProperties {
+                    // Strzałki w bok się zatrzymują; strzałka w górę i powrót kursora (np. po zamknięciu panelu) – przepuszczamy.
+                    enter = { if (it == FocusDirection.Left || it == FocusDirection.Right) FocusRequester.Cancel else FocusRequester.Default }
+                }
                 .focusGroup(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,

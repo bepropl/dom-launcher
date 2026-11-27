@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import pl.dom.launcher.update.UpdateState
 import kotlin.random.Random
 import pl.dom.launcher.ha.HaSummary
@@ -250,7 +251,18 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     var focusAppsGrid by remember { mutableStateOf(false) }
 
     // Bez tła: pod spodem rysuje się domek (OpenGL), który sam czyści ekran na czarno.
-    Box(Modifier.fillMaxSize()) {
+    // Zabezpieczenie: gdy kursor gdzieś zniknie (nic nie jest zaznaczone), po chwili wraca na bieżącą zakładkę.
+    var anyFocus by remember { mutableStateOf(true) }
+    LaunchedEffect(anyFocus, menu, showNotifications, showPanel) {
+        if (anyFocus || menu != null || showNotifications || showPanel) return@LaunchedEffect
+        delay(500)
+        if (!anyFocus) {
+            val ok = runCatching { tabFocus[tab].requestFocus() }.isSuccess
+            if (!ok) runCatching { gearFocus.requestFocus() }
+        }
+    }
+
+    Box(Modifier.fillMaxSize().onFocusChanged { anyFocus = it.hasFocus }) {
         // Domek nie rysuje się pod podglądem tytułu ani na czarnym ekranie (oszczędność i zwiastuny).
         if (detailStack.isEmpty() && !blank) {
             HouseWallpaper(

@@ -138,6 +138,18 @@ class MediaRepository(
         runCatching { polish.apply(found) }.getOrDefault(found)
     }
 
+    /** Test połączenia z TMDB (null = działa, inaczej opis problemu). */
+    suspend fun testTmdb(): String? = withContext(Dispatchers.IO) {
+        if (!hasTmdbKey) return@withContext "Brak klucza TMDB"
+        runCatching { tmdb.providers() }.exceptionOrNull()?.let { "TMDB: " + (it.message ?: "brak odpowiedzi") }
+    }
+
+    /** Test połączenia z Emby (null = działa). */
+    suspend fun testEmby(): String? = withContext(Dispatchers.IO) {
+        val client = emby(settings.current().embyUrl) ?: return@withContext "Brak adresu albo klucza Emby"
+        runCatching { client.resume() }.exceptionOrNull()?.let { "Emby: " + (it.message ?: "brak odpowiedzi") }
+    }
+
     /** Polskie okładki dla obserwowanych seriali i listy „Do obejrzenia”. */
     private suspend fun updateLibraryPosters() {
         val lib = library.state.value

@@ -3,6 +3,12 @@ package pl.dom.launcher.ui
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.background
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -68,19 +74,27 @@ fun MainTabs(
                     },
                 shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(50)),
                 colors = ClickableSurfaceDefaults.colors(
-                    containerColor = if (isSelected) Palette.Card.copy(alpha = 0.9f) else Color.Transparent,
-                    contentColor = if (isSelected) Palette.Text else Palette.Soft,
+                    containerColor = Color.Transparent,
+                    contentColor = if (isSelected) Palette.Amber else Palette.Soft,
                     focusedContainerColor = Palette.Amber,
                     focusedContentColor = Palette.OnAmber,
                 ),
                 scale = ClickableSurfaceDefaults.scale(focusedScale = 1f),
             ) {
-                Text(
-                    text = title,
-                    fontSize = 12.sp,
-                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                )
+                // Aktywna zakładka: pomarańczowy napis i kreska pod spodem – widać ją też, gdy kursor jest niżej.
+                Column(
+                    Modifier.padding(start = 14.dp, end = 14.dp, top = 6.dp, bottom = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(text = title, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal)
+                    Box(
+                        Modifier
+                            .padding(top = 2.dp)
+                            .width(20.dp)
+                            .height(2.dp)
+                            .background(if (isSelected) Palette.Amber else Color.Transparent, RoundedCornerShape(1.dp)),
+                    )
+                }
             }
         }
     }
