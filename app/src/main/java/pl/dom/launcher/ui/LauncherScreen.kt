@@ -23,6 +23,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlin.random.Random
+import pl.dom.launcher.ha.HaSummary
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.key
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -60,10 +67,9 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     val scope = rememberCoroutineScope()
 
     val settings by app.settings.flow.collectAsStateWithLifecycle(initialValue = null)
-    val haStates by app.ha.states.collectAsStateWithLifecycle()
     val haStatus by app.ha.status.collectAsStateWithLifecycle()
     val haRecent by app.ha.recent.collectAsStateWithLifecycle()
-    val haSummary = remember(haStates, settings?.ha) { settings?.ha?.let { summarize(haStates, it) } }
+    val haSummary by app.ha.summary.collectAsStateWithLifecycle()
     var seenNotifications by remember { mutableStateOf(0L) }
     var showNotifications by remember { mutableStateOf(false) }
     val apps by app.apps.apps.collectAsStateWithLifecycle()
@@ -97,14 +103,42 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     }
 
     // --- Ochrona OLED ---
-    val lastAt by Interaction.lastAt.collectAsStateWithLifecycle()
+    // Uwaga: czas ostatniego naciśnięcia pilota czytamy w efekcie, a nie w samym ekranie –
+    // inaczej każde naciśnięcie przebudowywałoby cały launcher (stąd brały się przycięcia menu).
     val idle by Interaction.idle.collectAsStateWithLifecycle()
     val idleMinutes = settings?.idleMinutes ?: 5
-    LaunchedEffect(lastAt, idleMinutes) {
-        Interaction.idle.value = false
-        if (idleMinutes > 0) {
-            delay(idleMinutes * 60_000L)
-            Interaction.idle.value = true
+    LaunchedEffect(idleMinutes) {
+        Interaction.lastAt.collectLatest {
+            Interaction.idle.value = false
+            if (idleMinutes > 0) {
+                delay(idleMinutes * 60_000L)
+                Interaction.idle.value = true
+            }
+        }
+    }
+    // Etapy wygaszacza: po 2 h przygaszenie, po N h (albo gdy nikogo nie ma w domu) czarny ekran.
+    var deepIdle by remember { mutableStateOf(false) }
+    var blankByTime by remember { mutableStateOf(false) }
+    val blankHours = settings?.blankHours ?: 3
+    LaunchedEffect(idle, blankHours) {
+        deepIdle = false
+        blankByTime = false
+        if (!idle) return@LaunchedEffect
+        delay(2 * 3600_000L)
+        deepIdle = true
+        if (blankHours > 0) {
+            delay((blankHours * 3600_000L - 2 * 3600_000L).coerceAtLeast(0))
+            blankByTime = true
+        }
+    }
+    val nobodyHome = haSummary?.peopleHome == 0 && (haSummary?.peopleTotal ?: 0) > 0
+    val blank = idle && (blankByTime || (settings?.blankWhenAway != false && nobodyHome))
+    // Domek w wygaszaczu co minutę przesuwa się odrobinę (ochrona przed wypaleniem).
+    val drift by produceState(Offset.Zero, idle) {
+        value = Offset.Zero
+        while (idle) {
+            delay(60_000)
+            value = Offset(Random.nextFloat() * 0.2f - 0.1f, Random.nextFloat() * 0.14f - 0.07f)
         }
     }
     // Co kilka minut cały interfejs przesuwa się o kilka pikseli, żeby nic nie stało w miejscu.
@@ -115,6 +149,9 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         }
     }
     val uiAlpha by animateFloatAsState(if (idle) 0f else 1f, tween(1500), label = "uiAlpha")
+    // Zwiastun: reszta ekranu musi być niewidoczna, bo film wyświetla się pod oknem aplikacji.
+    var trailer by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val tabsState = rememberSaveableStateHolder()
 
     val favoritePackages = settings?.favorites.orEmpty()
     val favorites: List<TvApp> = remember(favoritePackages, apps) {
@@ -165,6 +202,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     LaunchedEffect(goHome) {
         detailStack = emptyList()
         returnFocus = null
+        trailer = null
     }
     LaunchedEffect(detailStack.isEmpty()) {
         if (detailStack.isEmpty()) {
@@ -181,13 +219,21 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     var focusAppsGrid by remember { mutableStateOf(false) }
 
     // Bez tła: pod spodem rysuje się domek (OpenGL), który sam czyści ekran na czarno.
-    Box(Modifier.fillMaxSize()) {
-        HouseWallpaper(
-            Modifier.fillMaxSize(),
-            dim = if (idle) 0.55f else 1f,
-            mode = settings?.houseMode ?: HouseMode.FULL,
-            showHouse = tab == TAB_START && !showSettings && detailStack.isEmpty(),
-        )
+    Box(Modifier.fillMaxSize().alpha(if (trailer != null) 0f else 1f)) {
+        // Domek nie rysuje się pod podglądem tytułu ani na czarnym ekranie (oszczędność i zwiastuny).
+        if (detailStack.isEmpty() && !blank) {
+            HouseWallpaper(
+                Modifier.fillMaxSize(),
+                dim = when {
+                    deepIdle -> 0.3f
+                    idle -> 0.5f
+                    else -> 1f
+                },
+                mode = settings?.houseMode ?: HouseMode.FULL,
+                showHouse = idle || (tab == TAB_START && !showSettings),
+                layout = if (idle) Triple(drift.x, 0.14f + drift.y, 2.1f) else Triple(0.5f, 0.12f, 2.0f),
+            )
+        }
 
         Column(
             Modifier
@@ -229,7 +275,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                 Box(Modifier.padding(horizontal = EdgePadding)) {
                     MainTabs(tabs = Tabs, selected = tab, onSelect = { tab = it }, focusRequesters = tabFocus)
                 }
-                when (tab) {
+                tabsState.SaveableStateProvider(tab) { when (tab) {
                     TAB_START -> StartScreen(
                         favorites = favorites,
                         autoFocus = focusStartApps,
@@ -261,7 +307,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     TAB_WATCHLIST -> WatchlistScreen(library, feeds, actions)
                     TAB_MOVIES -> MoviesScreen(feeds, actions)
                     TAB_SHOWS -> ShowsScreen(library, feeds, actions)
-                }
+                } }
             }
         }
 
@@ -287,6 +333,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     actions = actions,
                     onOpen = { next -> detailStack = detailStack + next },
                     onClose = { detailStack = detailStack.dropLast(1) },
+                    trailerOpen = trailer != null,
+                    onTrailer = { key, title -> trailer = key to title },
                 )
             }
         }
@@ -299,8 +347,10 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
             Modifier.align(Alignment.TopEnd).padding(top = 70.dp, end = 40.dp),
         )
 
-        if (idle) IdleClock()
+        if (idle && !blank) IdleScreen(haSummary, deepIdle)
     }
+
+    trailer?.let { (key, title) -> TrailerPlayer(key, title, onClose = { trailer = null }) }
 }
 
 @Composable
@@ -310,22 +360,35 @@ fun ComingSoon(text: String) {
     }
 }
 
-/** W trybie spoczynku zostaje tylko mały zegar, który co minutę lekko się przesuwa. */
+/**
+ * Wygaszacz: domek na środku (rysuje go tło), pod nim godzina, temperatury i osoby w domu.
+ * Tekst jest przygaszony i co minutę zmienia miejsce, więc nic nie stoi długo w jednym punkcie (OLED).
+ */
 @Composable
-private fun IdleClock() {
+private fun IdleScreen(ha: HaSummary?, deep: Boolean) {
     val now by rememberNow()
     val shift by produceState(IntOffset.Zero) {
         while (true) {
-            value = IntOffset((-20..20).random(), (-12..12).random())
+            value = IntOffset((-60..60).random(), (-24..24).random())
             delay(60_000)
         }
     }
-    Box(Modifier.fillMaxSize()) {
-        Text(
-            text = now.format(TimeFormat),
-            modifier = Modifier.padding(start = 60.dp, top = 45.dp).offset { shift },
-            fontSize = 28.sp,
-            color = Palette.Muted.copy(alpha = 0.7f),
-        )
+    val alpha = if (deep) 0.35f else 0.6f
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
+        Column(
+            Modifier.padding(bottom = 70.dp).offset { shift },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(now.format(TimeFormat), fontSize = 34.sp, fontWeight = FontWeight.Light, color = Palette.Soft.copy(alpha = alpha))
+            val parts = buildList {
+                ha?.outside?.let { add(listOfNotNull(ha.weatherIcon, it).joinToString(" ") + " na zewnątrz") }
+                ha?.inside?.let { add("$it w domu") }
+                ha?.peopleHome?.let { add(if (it == 0) "nikogo w domu" else "w domu: " + ha.namesHome.joinToString(", ").ifBlank { "$it" }) }
+            }
+            if (parts.isNotEmpty()) {
+                Text(parts.joinToString("   ·   "), fontSize = 12.sp, color = Palette.Muted.copy(alpha = alpha))
+            }
+        }
     }
 }

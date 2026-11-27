@@ -38,6 +38,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         AppVisibility.launcherVisible = true
+        // Gdy na ekranie jest Dom, wygaszacz telewizora się nie włącza – mamy własny, bezpieczny dla OLED.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         Interaction.touch()
         // Odświeżamy listę aplikacji przy każdym powrocie (np. po instalacji nowej).
         val app = LauncherApp.from(this)

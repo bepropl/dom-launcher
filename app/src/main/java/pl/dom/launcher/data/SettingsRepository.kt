@@ -32,6 +32,10 @@ data class LauncherSettings(
     val providers: List<StreamingProvider>,
     /** Wybrane encje Home Assistanta i zaufany certyfikat. */
     val ha: HaConfig,
+    /** Po ilu godzinach wygaszacza ekran robi się całkiem czarny (0 = nigdy). */
+    val blankHours: Int = 3,
+    /** Czarny ekran od razu w trybie spoczynku, gdy nikogo nie ma w domu (z Home Assistanta). */
+    val blankWhenAway: Boolean = true,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -44,6 +48,8 @@ class SettingsRepository(private val context: Context) {
         val houseMode = stringPreferencesKey("house_mode")
         val providers = stringPreferencesKey("providers")
         val haConfig = stringPreferencesKey("ha_config")
+        val blankHours = intPreferencesKey("blank_hours")
+        val blankWhenAway = intPreferencesKey("blank_when_away")
     }
 
     val flow: Flow<LauncherSettings> = context.dataStore.data.map { it.toSettings() }
@@ -63,6 +69,10 @@ class SettingsRepository(private val context: Context) {
     suspend fun setEmbyUrl(url: String) = context.dataStore.edit { it[Keys.embyUrl] = url.trim().trimEnd('/') }
 
     suspend fun setHouseMode(mode: HouseMode) = context.dataStore.edit { it[Keys.houseMode] = mode.name }
+
+    suspend fun setBlankHours(hours: Int) = context.dataStore.edit { it[Keys.blankHours] = hours.coerceIn(0, 24) }
+
+    suspend fun setBlankWhenAway(on: Boolean) = context.dataStore.edit { it[Keys.blankWhenAway] = if (on) 1 else 0 }
 
     suspend fun setHaConfig(config: HaConfig) = context.dataStore.edit { it[Keys.haConfig] = config.toJson() }
 
@@ -86,5 +96,7 @@ class SettingsRepository(private val context: Context) {
             StreamingProvider(id, entry.substringAfter(':'))
         },
         ha = HaConfig.fromJson(this[Keys.haConfig]),
+        blankHours = this[Keys.blankHours] ?: 3,
+        blankWhenAway = (this[Keys.blankWhenAway] ?: 1) == 1,
     )
 }

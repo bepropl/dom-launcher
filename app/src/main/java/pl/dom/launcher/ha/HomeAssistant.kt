@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -70,8 +72,29 @@ class HomeAssistant(
     private val _status = MutableStateFlow<HaStatus>(HaStatus.Off)
     val status: StateFlow<HaStatus> = _status.asStateFlow()
 
+    /** Wszystkie encje (do wyboru na stronie w telefonie) – bez powiadamiania ekranu o każdej zmianie. */
+    private val all = java.util.concurrent.ConcurrentHashMap<String, HaState>()
+    fun allStates(): List<HaState> = all.values.toList()
+
+    /**
+     * Tylko encje wybrane do pokazania. HA potrafi wysyłać kilka zmian na sekundę
+     * (liczniki prądu itp.) – ekran odświeża się wyłącznie, gdy zmieni się coś, co widać.
+     */
+    @Volatile private var watched: Set<String> = emptySet()
     private val _states = MutableStateFlow<Map<String, HaState>>(emptyMap())
     val states: StateFlow<Map<String, HaState>> = _states.asStateFlow()
+
+    /** Dane do paska u góry i wygaszacza; zmienia się tylko, gdy zmieni się to, co widać. */
+    val summary: StateFlow<HaSummary?> by lazy {
+        combine(_states, settings.flow.map { it.ha }.distinctUntilChanged()) { s, c -> summarize(s, c) }
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.Eagerly, null)
+    }
+
+    private fun publishWatched() {
+        val w = watched
+        _states.value = w.mapNotNull { id -> all[id]?.let { id to it } }.toMap()
+    }
 
     private val _notifications = MutableSharedFlow<HaNotification>(extraBufferCapacity = 8)
     val notifications: SharedFlow<HaNotification> = _notifications.asSharedFlow()
@@ -93,15 +116,24 @@ class HomeAssistant(
                 restart,
             ) { connection, _ -> connection }.collectLatest { (url, pin) -> connectLoop(url, pin) }
         }
+        scope.launch {
+            settings.flow.map { it.ha }.distinctUntilChanged().collect { c ->
+                watched = buildSet {
+                    c.weather?.let(::add); c.outsideTemp?.let(::add); c.insideTemp?.let(::add)
+                    addAll(c.persons); addAll(c.rooms.values)
+                }
+                publishWatched()
+            }
+        }
         // Światła na domku: włączona lampa w pokoju rozjaśnia ten pokój.
         scope.launch {
-            combine(states, settings.flow.map { it.ha.rooms }.distinctUntilChanged()) { all, rooms ->
+            combine(states, settings.flow.map { it.ha.rooms }.distinctUntilChanged()) { current, rooms ->
                 FloatArray(HouseRooms.COUNT).also { levels ->
                     rooms.forEach { (room, entity) ->
-                        if (room in levels.indices) levels[room] = lightLevel(all[entity])
+                        if (room in levels.indices) levels[room] = lightLevel(current[entity])
                     }
                 }
-            }.collect { HouseLights.rooms.value = it }
+            }.distinctUntilChanged { a, b -> a.contentEquals(b) }.collect { HouseLights.rooms.value = it }
         }
     }
 
@@ -122,6 +154,7 @@ class HomeAssistant(
             val token = secrets.get(SecretStore.HA_TOKEN)
             if (url.isBlank() || token.isNullOrBlank()) {
                 _status.value = HaStatus.Off
+                all.clear()
                 _states.value = emptyMap()
                 return
             }
@@ -182,9 +215,9 @@ class HomeAssistant(
                     }
                     "result" -> if (msg.optInt("id") == statesRequest && msg.optBoolean("success")) {
                         val list = msg.optJSONArray("result")
-                        val map = HashMap<String, HaState>()
-                        if (list != null) for (i in 0 until list.length()) parseState(list.getJSONObject(i))?.let { map[it.entityId] = it }
-                        _states.value = map
+                        all.clear()
+                        if (list != null) for (i in 0 until list.length()) parseState(list.getJSONObject(i))?.let { all[it.entityId] = it }
+                        publishWatched()
                     }
                     "event" -> handleEvent(msg.optJSONObject("event") ?: continue)
                 }
@@ -212,7 +245,8 @@ class HomeAssistant(
             "state_changed" -> {
                 val id = data.optString("entity_id")
                 val newState = parseState(data.optJSONObject("new_state"))
-                _states.value = _states.value.toMutableMap().apply { if (newState == null) remove(id) else put(id, newState) }
+                if (newState == null) all.remove(id) else all[id] = newState
+                if (id in watched) publishWatched()
             }
             NOTIFY_EVENT -> scope.launch { notifyFromHa(data) }
         }

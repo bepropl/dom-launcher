@@ -157,7 +157,7 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
 
     private fun haInfo(): JSONObject = runBlocking {
         val config = app.settings.current().ha
-        val states = app.ha.states.value.values.sortedBy { it.name.lowercase() }
+        val states = app.ha.allStates().sortedBy { it.name.lowercase() }
         fun list(filter: (HaState) -> Boolean) = JSONArray(states.filter(filter).map {
             JSONObject().put("id", it.entityId).put("name", it.name).put("state", it.state + (it.unit?.let { u -> " $u" } ?: ""))
         })

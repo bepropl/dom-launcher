@@ -74,6 +74,10 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     /** Domek widać tylko na ekranie Start; na innych zakładkach zostają same cząstki. */
     @Volatile var showHouse = true
 
+    // Aktualne położenie – płynnie dociąga do scale/offsetX/offsetY (np. przejście do wygaszacza).
+    private var curScale = Float.NaN
+    private var curX = 0f
+    private var curY = 0f
     private var houseAlpha = 1f
     private var dustAlpha = 0.5f
     private var dustProgram = 0
@@ -165,6 +169,11 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         val dustTarget = if (showHouse) 0.45f else 1f
         dustAlpha += (dustTarget - dustAlpha) * min(1f, dt * 3f)
         val time = (now - startNanos) / 1e9f
+        if (curScale.isNaN()) { curScale = scale; curX = offsetX; curY = offsetY }
+        val move = min(1f, dt * 1.2f)
+        curScale += (scale - curScale) * move
+        curX += (offsetX - curX) * move
+        curY += (offsetY - curY) * move
 
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
@@ -186,9 +195,9 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         GLES20.glUniform1f(uPit, 0.24f)
         GLES20.glUniform1f(uAsp, width.toFloat() / height)
         GLES20.glUniform1f(uPointScale, height / 1080f)
-        GLES20.glUniform1f(uScale, scale)
-        GLES20.glUniform1f(uOff, offsetY)
-        GLES20.glUniform1f(uOffX, offsetX)
+        GLES20.glUniform1f(uScale, curScale)
+        GLES20.glUniform1f(uOff, curY)
+        GLES20.glUniform1f(uOffX, curX)
         GLES20.glUniform1f(uDim, dim * houseAlpha)
         GLES20.glUniform1fv(uRooms, HouseRooms.COUNT, rooms, 0)
 

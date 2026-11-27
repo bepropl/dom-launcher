@@ -175,9 +175,30 @@ fun SettingsScreen(settings: LauncherSettings?) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf(2, 5, 10, 0).forEach { m ->
                     Button(onClick = { scope.launch { app.settings.setIdleMinutes(m) } }) {
-                        Text(if (m == 0) "Wyłącz" else "$m min", fontSize = 11.sp)
+                        Text((if (m == minutes) "✓ " else "") + (if (m == 0) "Wyłącz" else "$m min"), fontSize = 11.sp)
                     }
                 }
+            }
+            Text(
+                "W trybie spoczynku: domek na środku, godzina, temperatury i osoby w domu. Wszystko powoli wędruje po ekranie, " +
+                    "a po 2 godzinach dodatkowo przygasa. Wygaszacz telewizora nie włącza się, gdy na ekranie jest Dom.",
+                fontSize = 9.sp, color = Palette.Muted,
+            )
+            val blankHours = settings?.blankHours ?: 3
+            Text(
+                if (blankHours == 0) "Czarny ekran: nigdy." else "Czarny ekran po $blankHours h trybu spoczynku.",
+                fontSize = 10.sp, color = Palette.Soft,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(1, 3, 6, 0).forEach { h ->
+                    Button(onClick = { scope.launch { app.settings.setBlankHours(h) } }) {
+                        Text((if (h == blankHours) "✓ " else "") + (if (h == 0) "Nigdy" else "$h h"), fontSize = 11.sp)
+                    }
+                }
+            }
+            val away = settings?.blankWhenAway ?: true
+            Button(onClick = { scope.launch { app.settings.setBlankWhenAway(!away) } }) {
+                Text((if (away) "✓ " else "") + "Czarny ekran, gdy nikogo nie ma w domu (Home Assistant)", fontSize = 11.sp)
             }
         }
         Section {

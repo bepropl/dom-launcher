@@ -36,7 +36,14 @@ object HouseLights {
  * a gdy launcher jest w tle albo ekran wyłączony – nie rysuje nic.
  */
 @Composable
-fun HouseWallpaper(modifier: Modifier = Modifier, dim: Float = 1f, mode: HouseMode = HouseMode.FULL, showHouse: Boolean = true) {
+fun HouseWallpaper(
+    modifier: Modifier = Modifier,
+    dim: Float = 1f,
+    mode: HouseMode = HouseMode.FULL,
+    showHouse: Boolean = true,
+    /** Położenie domku: (przesunięcie X, przesunięcie Y, wielkość). Zmiana jest płynna. */
+    layout: Triple<Float, Float, Float> = Triple(0.5f, 0.12f, 2.0f),
+) {
     if (mode == HouseMode.OFF) {
         Box(modifier)
         return
@@ -56,6 +63,9 @@ fun HouseWallpaper(modifier: Modifier = Modifier, dim: Float = 1f, mode: HouseMo
 
     renderer.dim = dim
     renderer.showHouse = showHouse
+    renderer.offsetX = layout.first
+    renderer.offsetY = layout.second
+    renderer.scale = layout.third
     renderer.detail = if (mode == HouseMode.ECO) 0.5f else 1f
     LaunchedEffect(lights) { renderer.roomTargets = lights.copyOf() }
 

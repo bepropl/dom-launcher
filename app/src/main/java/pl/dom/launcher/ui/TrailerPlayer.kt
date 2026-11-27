@@ -93,9 +93,9 @@ fun TrailerPlayer(videoKey: String, title: String, onClose: () -> Unit) {
     fun js(code: String) = webView?.evaluateJavascript(code, null)
 
     Box(
+        // Bez tła: film z WebView wyświetla się pod oknem aplikacji, więc wszystko nad nim musi być przezroczyste.
         Modifier
             .fillMaxSize()
-            .background(Color.Black)
             .focusRequester(focus)
             .focusable()
             .onPreviewKeyEvent { event ->
@@ -120,7 +120,7 @@ fun TrailerPlayer(videoKey: String, title: String, onClose: () -> Unit) {
                 WebView(ctx).apply {
                     isFocusable = false
                     isFocusableInTouchMode = false
-                    setBackgroundColor(AndroidColor.BLACK)
+                    setBackgroundColor(AndroidColor.TRANSPARENT)
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
                     settings.mediaPlaybackRequiresUserGesture = false
@@ -220,7 +220,7 @@ private fun playerHtml(key: String): String = """
 <html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="strict-origin-when-cross-origin">
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{position:absolute;top:0;left:0;width:100%;height:100%}</style>
+<style>html,body{margin:0;height:100%;background:transparent;overflow:hidden}#p{position:absolute;top:0;left:0;width:100%;height:100%}</style>
 </head><body>
 <div id="p"></div>
 <script>

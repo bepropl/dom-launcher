@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
+import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.OutlinedButton
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
@@ -69,12 +70,14 @@ fun DetailScreen(
     actions: MediaActions,
     onOpen: (DetailRequest) -> Unit,
     onClose: () -> Unit,
+    trailerOpen: Boolean,
+    onTrailer: (key: String, title: String) -> Unit,
 ) {
     var reload by remember { mutableIntStateOf(0) }
     val details by produceState<Result<MediaDetails>?>(null, request, reload) {
         value = runCatching { app.media.details(request.type, request.tmdbId) }
     }
-    var trailer by remember(request) { mutableStateOf(false) }
+    val trailer = trailerOpen
     val mainButton = remember(request) { FocusRequester() }
 
     BackHandler(enabled = !trailer, onBack = onClose)
@@ -105,13 +108,7 @@ fun DetailScreen(
                 Button(onClick = { reload++ }, modifier = Modifier.focusRequester(mainButton)) { Text("Spróbuj ponownie", fontSize = 11.sp) }
                 LaunchedEffect(Unit) { delay(50); runCatching { mainButton.requestFocus() } }
             }
-            else -> DetailContent(d, library, actions, mainButton, onTrailer = { trailer = true }, onOpen = onOpen)
-        }
-
-        if (trailer && d?.trailerKey != null) {
-            TrailerPlayer(d.trailerKey, d.item.title, onClose = {
-                trailer = false
-            })
+            else -> DetailContent(d, library, actions, mainButton, onTrailer = { d.trailerKey?.let { onTrailer(it, d.item.title) } }, onOpen = onOpen)
         }
     }
 
@@ -217,8 +214,8 @@ private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
     var season by remember(d.item.tmdbId) {
         mutableIntStateOf(watched?.let { w -> if (w.season in numbers) w.season else null } ?: numbers.first())
     }
+    // Poprzednia lista zostaje widoczna, dopóki nie wczyta się nowy sezon.
     val episodes by produceState<List<SeasonEpisode>?>(null, d.item.tmdbId, season) {
-        value = null
         value = runCatching { app.media.season(d.item.tmdbId, season) }.getOrDefault(emptyList())
     }
 
@@ -227,11 +224,16 @@ private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = EdgePadding + 4.dp, vertical = 4.dp)) {
             items(numbers, key = { "season-$it" }) { n ->
                 val selected = n == season
-                if (selected) {
-                    Button(onClick = { season = n }) { Text("Sezon $n", fontSize = 10.sp) }
-                } else {
-                    OutlinedButton(onClick = { season = n }) { Text("Sezon $n", fontSize = 10.sp) }
-                }
+                // Zawsze ten sam rodzaj przycisku – po wybraniu sezonu kursor zostaje na miejscu.
+                Button(
+                    onClick = { season = n },
+                    colors = ButtonDefaults.colors(
+                        containerColor = if (selected) Palette.Amber.copy(alpha = 0.35f) else Palette.Card.copy(alpha = 0.7f),
+                        contentColor = Palette.Text,
+                        focusedContainerColor = Palette.Amber,
+                        focusedContentColor = Palette.OnAmber,
+                    ),
+                ) { Text((if (selected) "✓ " else "") + "Sezon $n", fontSize = 10.sp) }
             }
         }
         val list = episodes
