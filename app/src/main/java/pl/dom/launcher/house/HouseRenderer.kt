@@ -73,6 +73,8 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     @Volatile var offsetY = 0.12f
     /** Domek widać tylko na ekranie Start; na innych zakładkach zostają same cząstki. */
     @Volatile var showHouse = true
+    /** Jasność domku z ustawień (mnożnik, ok. 0,7–2). */
+    @Volatile var brightness = 1.3f
 
     // Aktualne położenie – płynnie dociąga do scale/offsetX/offsetY (np. przejście do wygaszacza).
     private var curScale = Float.NaN
@@ -95,7 +97,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     private val startNanos = System.nanoTime()
 
     private var uTime = 0; private var uAng = 0; private var uPit = 0; private var uAsp = 0
-    private var uPointScale = 0; private var uScale = 0; private var uOff = 0; private var uOffX = 0; private var uDim = 0; private var uRooms = 0
+    private var uPointScale = 0; private var uScale = 0; private var uOff = 0; private var uOffX = 0; private var uDim = 0; private var uRooms = 0; private var uBright = 0
     private var aPos = 0; private var aAttr = 0
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -111,6 +113,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         uScale = GLES20.glGetUniformLocation(program, "sc")
         uOff = GLES20.glGetUniformLocation(program, "off")
         uOffX = GLES20.glGetUniformLocation(program, "offx")
+        uBright = GLES20.glGetUniformLocation(program, "br")
         uDim = GLES20.glGetUniformLocation(program, "dim")
         uRooms = GLES20.glGetUniformLocation(program, "rm")
 
@@ -198,6 +201,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         GLES20.glUniform1f(uScale, curScale)
         GLES20.glUniform1f(uOff, curY)
         GLES20.glUniform1f(uOffX, curX)
+        GLES20.glUniform1f(uBright, brightness)
         GLES20.glUniform1f(uDim, dim * houseAlpha)
         GLES20.glUniform1fv(uRooms, HouseRooms.COUNT, rooms, 0)
 
@@ -237,7 +241,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         val VERTEX_SHADER = """
             attribute vec3 p;
             attribute vec4 a;
-            uniform float t, ang, pit, asp, ps, sc, off, offx, dim;
+            uniform float t, ang, pit, asp, ps, sc, off, offx, dim, br;
             uniform float rm[12];
             varying float va;
             varying vec3 vc;
@@ -257,12 +261,14 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
                 for (int i = 1; i < 12; i++) { if (i == ri) lit = rm[i]; }
                 float tw = .7 + .3 * sin(t * 1.7 + a.z * 80.);
                 vec3 am = vec3(1., .56, .16);
-                if (a.x < .5) { va = a.w * tw * (.5 + lit * .8); vc = mix(am, vec3(1., .9, .7), lit * .7); }
-                else if (a.x < 1.5) { va = lit * tw; vc = vec3(1., .86, .6); }
-                else { va = .25 * tw; vc = vec3(1., .6, .25); }
+                // Krawędzie: jasność z ustawień (br). Zapalony pokój: krawędzie jaśniejsze i cieplejsze,
+                // a wnętrze świeci mocną, ciepłą poświatą – wyraźnie odcina się od bryły.
+                if (a.x < .5) { va = a.w * tw * (.6 * br + lit * 1.1); vc = mix(am, vec3(1., .88, .6), lit * .8); }
+                else if (a.x < 1.5) { va = lit * (.85 + .15 * tw) * (1.3 + .3 * br); vc = vec3(1., .8, .42); }
+                else { va = .3 * tw * br; vc = vec3(1., .6, .25); }
                 va *= dim;
                 gl_Position = vec4(q.x * sc / asp + offx * (-q.z), q.y * sc + off * (-q.z), 0., -q.z);
-                gl_PointSize = (a.x > .5 && a.x < 1.5 ? 2.7 : 2.2) * ps * (sc / 3.) * 28. / (-q.z);
+                gl_PointSize = (a.x > .5 && a.x < 1.5 ? 3.6 : 2.2 * (.85 + .15 * br)) * ps * (sc / 3.) * 28. / (-q.z);
             }
         """.trimIndent()
 

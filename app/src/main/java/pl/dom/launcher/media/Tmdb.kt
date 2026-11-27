@@ -66,6 +66,16 @@ class Tmdb(private val key: () -> String?) {
         }
         val trailer = videos.filter { it.optString("type") in setOf("Trailer", "Teaser") }.minByOrNull(::rank)
             ?: videos.firstOrNull()
+        // Serial bez polskiego zwiastuna: sprawdź jeszcze najnowszy (już wyemitowany) sezon.
+        val seasonPl = if (type == MediaType.TV && trailer?.optString("iso_639_1") != "pl") {
+            val today = java.time.LocalDate.now().toString()
+            val latest = o.optJSONArray("seasons").mapObjects { s ->
+                val n = s.optInt("season_number")
+                val date = s.optStringOrNull("air_date")
+                if (n > 0 && date != null && date <= today) n else null
+            }.maxOrNull()
+            latest?.let { runCatching { seasonTrailerPl(id, it) }.getOrNull() }
+        } else null
         return MediaDetails(
             item = parseItem(o, type),
             tagline = o.optString("tagline").takeIf { it.isNotBlank() },
@@ -80,7 +90,7 @@ class Tmdb(private val key: () -> String?) {
                 val number = s.optInt("season_number")
                 if (number > 0) number to s.optStringOrNull("air_date") else null
             }.toMap() else emptyMap(),
-            trailerKey = trailer?.optString("key")?.takeIf { it.isNotBlank() },
+            trailerKey = seasonPl ?: trailer?.optString("key")?.takeIf { it.isNotBlank() },
             recommendations = o.optJSONObject("recommendations")?.optJSONArray("results")
                 .mapObjects { r ->
                     when (r.optString("media_type")) {
@@ -92,6 +102,22 @@ class Tmdb(private val key: () -> String?) {
             cast = o.optJSONObject("credits")?.optJSONArray("cast").mapObjects { it.optString("name").takeIf { n -> n.isNotBlank() } }.take(6),
         )
     }
+
+    /** Najwyżej oceniona polska okładka z TMDB (null = brak polskiej). */
+    fun polishPoster(type: MediaType, id: Int): String? {
+        val path = if (type == MediaType.MOVIE) "/movie/$id/images" else "/tv/$id/images"
+        val posters = get(path, mapOf("include_image_language" to "pl")).optJSONArray("posters")
+            .mapObjects { p -> if (p.optString("iso_639_1") == "pl") p else null }
+        return posters.maxByOrNull { it.optDouble("vote_average", 0.0) * 1000 + it.optInt("vote_count") }
+            ?.optString("file_path")?.takeIf { it.isNotBlank() }
+    }
+
+    /** Polski zwiastun najnowszego sezonu serialu (TMDB często trzyma je przy sezonie, nie przy serialu). */
+    fun seasonTrailerPl(id: Int, season: Int): String? =
+        get("/tv/$id/season/$season/videos", mapOf("include_video_language" to "pl")).optJSONArray("results")
+            .mapObjects { v -> if (v.optString("site") == "YouTube" && v.optString("iso_639_1") == "pl") v else null }
+            .sortedBy { when (it.optString("type")) { "Trailer" -> 0; "Teaser" -> 1; else -> 2 } }
+            .firstOrNull()?.optString("key")?.takeIf { it.isNotBlank() }
 
     fun season(id: Int, season: Int): List<SeasonEpisode> =
         get("/tv/$id/season/$season").optJSONArray("episodes").mapObjects { e ->

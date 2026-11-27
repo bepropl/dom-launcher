@@ -171,6 +171,15 @@ fun SettingsScreen(settings: LauncherSettings?) {
                     }
                 }
             }
+            val level = settings?.houseBrightness ?: 3
+            Text("Jasność domku: $level z 5", fontSize = 10.sp, color = Palette.Soft)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (1..5).forEach { l ->
+                    Button(onClick = { scope.launch { app.settings.setHouseBrightness(l) } }) {
+                        Text(if (l == level) "✓ $l" else "$l", fontSize = 11.sp)
+                    }
+                }
+            }
         }
 
         Section {

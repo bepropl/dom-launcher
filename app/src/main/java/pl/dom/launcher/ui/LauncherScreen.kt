@@ -101,6 +101,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     // Fokus na pierwszą aplikację tylko po starcie, po Home i po Wstecz – nie przy każdym
     // przejściu przez zakładkę Start w menu (to „szarpało” menu).
     var focusStartApps by remember { mutableStateOf(true) }
+    // Wyszukiwanie w Filmach/Serialach czyści się po zmianie zakładki i po Home.
+    var searchReset by rememberSaveable { mutableStateOf(0) }
     val goHome by goHomeSignal.collectAsStateWithLifecycle()
     LaunchedEffect(goHome) {
         tab = TAB_START
@@ -108,7 +110,9 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         showAllApps = false
         showPanel = false
         focusStartApps = true
+        searchReset++
     }
+    LaunchedEffect(tab) { searchReset++ }
     LaunchedEffect(showAllApps, returnToAllTile) {
         if (!showAllApps && returnToAllTile) {
             delay(120)
@@ -252,10 +256,11 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
             HouseWallpaper(
                 Modifier.fillMaxSize(),
                 dim = when {
-                    deepIdle -> 0.3f
-                    idle -> 0.5f
+                    deepIdle -> 0.5f
+                    idle -> 0.75f
                     else -> 1f
                 },
+                brightnessLevel = settings?.houseBrightness ?: 3,
                 mode = settings?.houseMode ?: HouseMode.FULL,
                 showHouse = idle || (tab == TAB_START && !showSettings && !showAllApps),
                 layout = if (idle) Triple(drift.x, 0.14f + drift.y, 2.1f) else Triple(0.5f, 0.12f, 2.0f),
@@ -321,8 +326,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                         updateState = updateState,
                     )
                     TAB_WATCHLIST -> WatchlistScreen(library, feeds, actions)
-                    TAB_MOVIES -> MoviesScreen(feeds, actions)
-                    TAB_SHOWS -> ShowsScreen(library, feeds, actions)
+                    TAB_MOVIES -> MoviesScreen(feeds, actions, searchReset)
+                    TAB_SHOWS -> ShowsScreen(library, feeds, actions, searchReset)
                 } }
             }
         }

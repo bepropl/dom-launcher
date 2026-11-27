@@ -70,7 +70,8 @@ fun Library.showsWithNewEpisodes(): List<FollowedShow> =
 
 /** Seriale, z którymi jesteście na bieżąco – najbliższa premiera na początku. */
 fun Library.showsWaiting(): List<FollowedShow> =
-    shows.filter { it.started && !it.hasNewEpisode }.sortedBy { it.nextAir?.airDate ?: "9999" }
+    // Tylko ze znaną datą następnego odcinka – reszta jest w „Obserwowanych”.
+    shows.filter { it.started && !it.hasNewEpisode && it.nextAir?.airDate != null }.sortedBy { it.nextAir?.airDate ?: "9999" }
 
 fun FollowedShow.cardSubtitle(): String {
     val next = nextToWatch
@@ -172,9 +173,11 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
  * Wyniki pojawiają się same, 2 s po ostatniej literze; strzałka w dół przenosi na wyniki.
  */
 @Composable
-private fun SearchSection(type: MediaType, actions: MediaActions) {
-    var query by rememberSaveable(type) { mutableStateOf("") }
-    var searched by rememberSaveable(type) { mutableStateOf("") }
+private fun SearchSection(type: MediaType, actions: MediaActions, reset: Int) {
+    // reset zmienia się przy zmianie zakładki i po Home – wtedy pole startuje puste.
+    // Podgląd tytułu nie zmienia zakładki, więc po powrocie wyszukiwanie zostaje.
+    var query by rememberSaveable(type, reset) { mutableStateOf("") }
+    var searched by rememberSaveable(type, reset) { mutableStateOf("") }
     LaunchedEffect(query) {
         if (query.isNotBlank()) delay(2000)
         searched = query.trim()
@@ -263,12 +266,12 @@ private fun SearchSection(type: MediaType, actions: MediaActions) {
 
 /** Zakładka Filmy: wyszukiwarka, wyróżniony film, polecane w Waszych serwisach i biblioteka z Emby. */
 @Composable
-fun MoviesScreen(feeds: Feeds, actions: MediaActions) {
+fun MoviesScreen(feeds: Feeds, actions: MediaActions, searchReset: Int = 0) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        SearchSection(MediaType.MOVIE, actions)
+        SearchSection(MediaType.MOVIE, actions, searchReset)
         Problems(feeds)
         if (feeds.movies.isNotEmpty()) {
             MediaGrid("Polecane w Waszych serwisach", rows = 2, cellHeight = BigPosterHeight) {
@@ -290,12 +293,12 @@ fun MoviesScreen(feeds: Feeds, actions: MediaActions) {
 
 /** Zakładka Seriale: obserwowane, popularne w Waszych serwisach i biblioteka z Emby. */
 @Composable
-fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
+fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions, searchReset: Int = 0) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        SearchSection(MediaType.TV, actions)
+        SearchSection(MediaType.TV, actions, searchReset)
         Problems(feeds)
         if (feeds.shows.isNotEmpty()) {
             MediaGrid("Popularne w Waszych serwisach", "OK – szczegóły i zwiastun", rows = 3, cellHeight = PosterHeight) {

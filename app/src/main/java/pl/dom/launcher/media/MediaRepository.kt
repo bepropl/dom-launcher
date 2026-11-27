@@ -45,11 +45,47 @@ class MediaRepository(
 
     private val refreshLock = Mutex()
     @Volatile private var lastRefreshAt = 0L
+    @Volatile private var lastShowsAt = 0L
+    private val polish by lazy { PolishPosters(context, tmdb) }
 
     val hasTmdbKey: Boolean get() = secrets.has(SecretStore.TMDB_KEY)
 
+    /**
+     * Wołane przy każdym powrocie do launchera:
+     *  - polecane, Emby i dostępność listy – przy starcie i potem co 24 h (pełne odświeżenie),
+     *  - daty odcinków obserwowanych seriali – co 6 h,
+     *  - „Kontynuuj” z Emby – za każdym razem (zmienia się po każdym oglądaniu na NAS).
+     */
     suspend fun refreshIfDue() {
-        if (System.currentTimeMillis() - lastRefreshAt > REFRESH_INTERVAL_MS) refresh()
+        val now = System.currentTimeMillis()
+        when {
+            now - lastRefreshAt > FULL_REFRESH_MS -> refresh()
+            now - lastShowsAt > SHOWS_REFRESH_MS -> {
+                refreshShows()
+                refreshEmbyResume()
+            }
+            else -> refreshEmbyResume()
+        }
+    }
+
+    /** Tylko obserwowane seriale (nowe odcinki, daty premier). */
+    private suspend fun refreshShows() = refreshLock.withLock {
+        if (!hasTmdbKey) return@withLock
+        withContext(Dispatchers.IO) {
+            library.state.value.shows.forEach { show ->
+                runCatching { tmdb.tvDetails(show.tmdbId) }.onSuccess { d -> updateShowDetails(d) }
+            }
+        }
+        lastShowsAt = System.currentTimeMillis()
+    }
+
+    /** Tylko „Kontynuuj” z Emby – jedno szybkie zapytanie w sieci domowej. */
+    private suspend fun refreshEmbyResume() {
+        if (refreshLock.isLocked) return
+        val resume = withContext(Dispatchers.IO) {
+            emby(settings.current().embyUrl)?.let { runCatching { it.resume() }.getOrNull() }
+        } ?: return
+        _feeds.value = _feeds.value.copy(embyResume = resume)
     }
 
     suspend fun refresh() = refreshLock.withLock {
@@ -68,11 +104,15 @@ class MediaRepository(
                 }
                 // Lista „Do obejrzenia”: przy starcie launchera i potem raz na 24 h.
                 runCatching { checkAvailability(s.providers) }
+                runCatching { updateLibraryPosters() }
                 if (s.providers.isEmpty()) {
                     problems += "Zaznacz swoje serwisy streamingowe na stronie konfiguracji w telefonie."
                 } else {
                     movies = roundRobin(s.providers.map { p -> runCatching { tmdb.discover(MediaType.MOVIE, p) }.getOrDefault(emptyList()) })
                     shows = roundRobin(s.providers.map { p -> runCatching { tmdb.discover(MediaType.TV, p) }.getOrDefault(emptyList()) })
+                    // Polskie okładki tam, gdzie TMDB je ma.
+                    movies = runCatching { polish.apply(movies) }.getOrDefault(movies)
+                    shows = runCatching { polish.apply(shows) }.getOrDefault(shows)
                     if (movies.isEmpty() && shows.isEmpty()) problems += "TMDB nie odpowiada – sprawdź klucz i połączenie."
                 }
             }
@@ -89,10 +129,27 @@ class MediaRepository(
             Feeds(movies, shows, resume, embyMovies, embyShows, problems, loading = false)
         }
         lastRefreshAt = System.currentTimeMillis()
+        lastShowsAt = lastRefreshAt
         _feeds.value = result
     }
 
-    suspend fun search(text: String): List<MediaItem> = withContext(Dispatchers.IO) { tmdb.search(text) }
+    suspend fun search(text: String): List<MediaItem> = withContext(Dispatchers.IO) {
+        val found = tmdb.search(text)
+        runCatching { polish.apply(found) }.getOrDefault(found)
+    }
+
+    /** Polskie okładki dla obserwowanych seriali i listy „Do obejrzenia”. */
+    private suspend fun updateLibraryPosters() {
+        val lib = library.state.value
+        val shows = lib.shows.associate { it.tmdbId to polish.posterFor(MediaType.TV, it.tmdbId) }
+        val list = lib.watchlist.associate { (it.type to it.tmdbId) to polish.posterFor(it.type, it.tmdbId) }
+        library.update { current ->
+            current.copy(
+                shows = current.shows.map { s -> shows[s.tmdbId]?.let { s.copy(posterPath = it) } ?: s },
+                watchlist = current.watchlist.map { w -> list[w.type to w.tmdbId]?.let { w.copy(posterPath = it) } ?: w },
+            )
+        }
+    }
 
     /** Szczegóły do ekranu podglądu, z serwisem, w którym tytuł jest dostępny. */
     suspend fun details(type: MediaType, tmdbId: Int): MediaDetails = withContext(Dispatchers.IO) {
@@ -112,12 +169,13 @@ class MediaRepository(
             tmdb.tvDetails(tmdbId) to (runCatching { tmdb.availability(MediaType.TV, tmdbId, settings.current().providers) }.getOrNull() ?: Availability(null, false))
         }
         val provider = availability.provider
+        val plPoster = runCatching { polish.posterFor(MediaType.TV, tmdbId) }.getOrNull()
         library.update { lib ->
             if (lib.isFollowed(tmdbId)) return@update lib
             val show = FollowedShow(
                 tmdbId = tmdbId,
                 name = details.name,
-                posterPath = details.posterPath,
+                posterPath = plPoster ?: details.posterPath,
                 backdropPath = details.backdropPath,
                 provider = provider,
                 watched = if (caughtUp) details.lastAired?.copy(airDate = null) ?: Episode(0, 0) else Episode(0, 0),
@@ -151,11 +209,12 @@ class MediaRepository(
             tmdb.item(type, tmdbId) to (runCatching { tmdb.availability(type, tmdbId, settings.current().providers) }.getOrNull() ?: Availability(null, false))
         }
         val now = System.currentTimeMillis()
+        val plPoster = runCatching { polish.posterFor(type, tmdbId) }.getOrNull()
         library.update { lib ->
             if (lib.isOnWatchlist(type, tmdbId)) lib
             else lib.copy(
                 watchlist = lib.watchlist + WatchItem(
-                    tmdbId, type, item.title, item.posterPath, item.backdropPath, availability.provider, now,
+                    tmdbId, type, item.title, plPoster ?: item.posterPath, item.backdropPath, availability.provider, now,
                     releaseDate = item.releaseDate, mine = availability.mine, checkedAt = now,
                 ),
             )
@@ -170,7 +229,7 @@ class MediaRepository(
         lib.copy(shows = lib.shows.map { s ->
             if (s.tmdbId != d.tmdbId) s
             else s.copy(
-                name = d.name, posterPath = d.posterPath ?: s.posterPath, backdropPath = d.backdropPath ?: s.backdropPath,
+                name = d.name, posterPath = s.posterPath ?: d.posterPath, backdropPath = d.backdropPath ?: s.backdropPath,
                 seasons = d.seasons, lastAired = d.lastAired, nextAir = d.nextAir, ended = d.ended,
                 updatedAt = System.currentTimeMillis(), firstAirDate = d.firstAirDate ?: s.firstAirDate,
             )
@@ -245,6 +304,7 @@ class MediaRepository(
     }
 
     companion object {
-        private const val REFRESH_INTERVAL_MS = 3 * 60 * 60 * 1000L
+        const val FULL_REFRESH_MS = 24 * 3600_000L
+        const val SHOWS_REFRESH_MS = 6 * 3600_000L
     }
 }

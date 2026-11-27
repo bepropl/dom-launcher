@@ -43,6 +43,8 @@ fun HouseWallpaper(
     showHouse: Boolean = true,
     /** Położenie domku: (przesunięcie X, przesunięcie Y, wielkość). Zmiana jest płynna. */
     layout: Triple<Float, Float, Float> = Triple(0.5f, 0.12f, 2.0f),
+    /** Poziom jasności 1–5 z ustawień. */
+    brightnessLevel: Int = 3,
 ) {
     if (mode == HouseMode.OFF) {
         Box(modifier)
@@ -63,6 +65,7 @@ fun HouseWallpaper(
 
     renderer.dim = dim
     renderer.showHouse = showHouse
+    renderer.brightness = HouseBrightness.multiplier(brightnessLevel)
     renderer.offsetX = layout.first
     renderer.offsetY = layout.second
     renderer.scale = layout.third
@@ -132,5 +135,16 @@ private class FramePacer {
     fun stop() {
         running = false
         handler.removeCallbacks(tick)
+    }
+}
+
+/** Poziomy jasności domku (ustawienia launchera). */
+object HouseBrightness {
+    fun multiplier(level: Int): Float = when (level.coerceIn(1, 5)) {
+        1 -> 0.7f
+        2 -> 1.0f
+        3 -> 1.3f
+        4 -> 1.65f
+        else -> 2.0f
     }
 }

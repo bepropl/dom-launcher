@@ -36,6 +36,8 @@ data class LauncherSettings(
     val blankHours: Int = 3,
     /** Czarny ekran od razu w trybie spoczynku, gdy nikogo nie ma w domu (z Home Assistanta). */
     val blankWhenAway: Boolean = true,
+    /** Jasność domku 1–5. */
+    val houseBrightness: Int = 3,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -50,6 +52,7 @@ class SettingsRepository(private val context: Context) {
         val haConfig = stringPreferencesKey("ha_config")
         val blankHours = intPreferencesKey("blank_hours")
         val blankWhenAway = intPreferencesKey("blank_when_away")
+        val houseBrightness = intPreferencesKey("house_brightness")
     }
 
     val flow: Flow<LauncherSettings> = context.dataStore.data.map { it.toSettings() }
@@ -69,6 +72,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setEmbyUrl(url: String) = context.dataStore.edit { it[Keys.embyUrl] = url.trim().trimEnd('/') }
 
     suspend fun setHouseMode(mode: HouseMode) = context.dataStore.edit { it[Keys.houseMode] = mode.name }
+
+    suspend fun setHouseBrightness(level: Int) = context.dataStore.edit { it[Keys.houseBrightness] = level.coerceIn(1, 5) }
 
     suspend fun setBlankHours(hours: Int) = context.dataStore.edit { it[Keys.blankHours] = hours.coerceIn(0, 24) }
 
@@ -98,5 +103,6 @@ class SettingsRepository(private val context: Context) {
         ha = HaConfig.fromJson(this[Keys.haConfig]),
         blankHours = this[Keys.blankHours] ?: 3,
         blankWhenAway = (this[Keys.blankWhenAway] ?: 1) == 1,
+        houseBrightness = this[Keys.houseBrightness] ?: 3,
     )
 }
