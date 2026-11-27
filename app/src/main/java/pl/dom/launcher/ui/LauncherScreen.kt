@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import pl.dom.launcher.update.UpdateState
 import kotlin.random.Random
 import pl.dom.launcher.ha.HaSummary
