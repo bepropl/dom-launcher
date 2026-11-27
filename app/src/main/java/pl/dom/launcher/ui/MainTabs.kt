@@ -5,13 +5,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Tab
 import androidx.tv.material3.TabRow
 import androidx.tv.material3.Text
 
-/** Menu: Start / Do obejrzenia / Filmy / Seriale / Aplikacje. Zakładka zmienia się po najechaniu. */
+/**
+ * Menu: Start / Do obejrzenia / Filmy / Seriale / Aplikacje. Zakładka zmienia się po najechaniu.
+ * Wejście do menu z góry albo z dołu zawsze trafia na bieżącą zakładkę (na ekranie Start – na „Start”),
+ * a nie na tę, która akurat leży najbliżej kursora.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun MainTabs(
     tabs: List<String>,
@@ -19,7 +27,12 @@ fun MainTabs(
     onSelect: (Int) -> Unit,
     focusRequesters: List<FocusRequester>,
 ) {
-    TabRow(selectedTabIndex = selected) {
+    TabRow(
+        selectedTabIndex = selected,
+        modifier = Modifier
+            .focusProperties { enter = { focusRequesters[selected] } }
+            .focusGroup(),
+    ) {
         tabs.forEachIndexed { index, title ->
             Tab(
                 selected = index == selected,
