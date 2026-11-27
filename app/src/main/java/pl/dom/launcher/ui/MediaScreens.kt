@@ -12,6 +12,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import android.app.AlertDialog
+import android.content.Context
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
+import android.widget.FrameLayout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.rememberScrollState
@@ -143,13 +155,82 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
     }
 }
 
-/** Zakładka Filmy: wyróżniony film, polecane w Waszych serwisach i biblioteka z Emby. */
+/**
+ * Pole „Szukaj” na górze zakładek Filmy i Seriale. OK otwiera klawiaturę telewizora
+ * (z mikrofonem do dyktowania), wyniki z TMDB pokazują się jako plakaty – OK otwiera podgląd.
+ */
+@Composable
+private fun SearchSection(type: MediaType, actions: MediaActions) {
+    val context = LocalContext.current
+    var query by rememberSaveable(type) { mutableStateOf("") }
+    val results by produceState<Result<List<MediaItem>>?>(null, query) {
+        value = null
+        value = if (query.isBlank()) null else runCatching { actions.search(query, type) }
+    }
+    val what = if (type == MediaType.MOVIE) "filmu" else "serialu"
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.padding(start = EdgePadding + 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { askText(context, "Szukaj $what", query) { query = it } }) {
+                Text(if (query.isBlank()) "⌕  Szukaj $what" else "⌕  „$query”", fontSize = 11.sp)
+            }
+            if (query.isNotBlank()) OutlinedButton(onClick = { query = "" }) { Text("Wyczyść", fontSize = 11.sp) }
+        }
+        if (query.isNotBlank()) {
+            val r = results
+            when {
+                r == null -> EmptyNote("Szukam…")
+                r.isFailure -> EmptyNote(r.exceptionOrNull()?.message ?: "Nie udało się wyszukać")
+                r.getOrThrow().isEmpty() -> EmptyNote("Nic nie znalazłem dla „$query”.")
+                else -> MediaRow("Wyniki wyszukiwania", "OK – szczegóły, obserwuj, + Do obejrzenia") {
+                    items(r.getOrThrow(), key = { "find-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
+                }
+            }
+        }
+    }
+}
+
+/** Okienko z polem tekstowym – systemowa klawiatura telewizora (działa też dyktowanie). */
+private fun askText(context: Context, title: String, initial: String, onResult: (String) -> Unit) {
+    val input = EditText(context).apply {
+        setText(initial)
+        setSelection(initial.length)
+        isSingleLine = true
+        hint = "Tytuł"
+        imeOptions = EditorInfo.IME_ACTION_SEARCH
+    }
+    val box = FrameLayout(context).apply {
+        val pad = (20 * context.resources.displayMetrics.density).toInt()
+        setPadding(pad, pad / 2, pad, 0)
+        addView(input)
+    }
+    val dialog = AlertDialog.Builder(context)
+        .setTitle(title)
+        .setView(box)
+        .setPositiveButton("Szukaj") { _, _ -> onResult(input.text.toString().trim()) }
+        .setNegativeButton("Anuluj", null)
+        .create()
+    input.setOnEditorActionListener { _, id, _ ->
+        if (id == EditorInfo.IME_ACTION_SEARCH || id == EditorInfo.IME_ACTION_DONE || id == EditorInfo.IME_ACTION_GO) {
+            onResult(input.text.toString().trim())
+            dialog.dismiss()
+            true
+        } else {
+            false
+        }
+    }
+    dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
+    dialog.show()
+    input.requestFocus()
+}
+
+/** Zakładka Filmy: wyszukiwarka, wyróżniony film, polecane w Waszych serwisach i biblioteka z Emby. */
 @Composable
 fun MoviesScreen(feeds: Feeds, actions: MediaActions) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        SearchSection(MediaType.MOVIE, actions)
         Problems(feeds)
         feeds.movies.firstOrNull()?.let { Hero(it, actions) }
         if (feeds.movies.size > 1) {
@@ -177,6 +258,7 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        SearchSection(MediaType.TV, actions)
         Problems(feeds)
         if (library.shows.isNotEmpty()) {
             MediaRow("Obserwowane", "OK – szczegóły i odcinki") {

@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlin.random.Random
 import pl.dom.launcher.ha.HaSummary
+import pl.dom.launcher.TrailerActivity
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.text.font.FontWeight
@@ -53,12 +54,11 @@ import pl.dom.launcher.ha.summarize
 import pl.dom.launcher.data.TvApp
 import pl.dom.launcher.service.Interaction
 
-private val Tabs = listOf("Start", "Do obejrzenia", "Filmy", "Seriale", "Aplikacje")
+private val Tabs = listOf("Start", "Do obejrzenia", "Filmy", "Seriale")
 private const val TAB_START = 0
 private const val TAB_WATCHLIST = 1
 private const val TAB_MOVIES = 2
 private const val TAB_SHOWS = 3
-private const val TAB_APPS = 4
 
 @Composable
 fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
@@ -79,6 +79,10 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
 
     var tab by rememberSaveable { mutableIntStateOf(TAB_START) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    // Wszystkie aplikacje: osobny ekran otwierany kafelkiem „Wszystkie” na Starcie.
+    var showAllApps by rememberSaveable { mutableStateOf(false) }
+    val allAppsTile = remember { FocusRequester() }
+    var returnToAllTile by remember { mutableStateOf(false) }
 
     // Przycisk Home zawsze wraca na Start.
     // Fokus na pierwszą aplikację tylko po starcie, po Home i po Wstecz – nie przy każdym
@@ -88,13 +92,25 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     LaunchedEffect(goHome) {
         tab = TAB_START
         showSettings = false
+        showAllApps = false
         focusStartApps = true
+    }
+    LaunchedEffect(showAllApps, returnToAllTile) {
+        if (!showAllApps && returnToAllTile) {
+            delay(120)
+            runCatching { allAppsTile.requestFocus() }
+            returnToAllTile = false
+        }
     }
 
     // Wstecz: z ustawień i innych zakładek wraca na Start; na Starcie nic nie robi (to ekran główny).
     BackHandler(enabled = true) {
         when {
             showSettings -> showSettings = false
+            showAllApps -> {
+                showAllApps = false
+                returnToAllTile = true
+            }
             tab != TAB_START -> {
                 tab = TAB_START
                 focusStartApps = true
@@ -149,8 +165,6 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         }
     }
     val uiAlpha by animateFloatAsState(if (idle) 0f else 1f, tween(1500), label = "uiAlpha")
-    // Zwiastun: reszta ekranu musi być niewidoczna, bo film wyświetla się pod oknem aplikacji.
-    var trailer by remember { mutableStateOf<Pair<String, String>?>(null) }
     val tabsState = rememberSaveableStateHolder()
 
     val favoritePackages = settings?.favorites.orEmpty()
@@ -202,7 +216,6 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     LaunchedEffect(goHome) {
         detailStack = emptyList()
         returnFocus = null
-        trailer = null
     }
     LaunchedEffect(detailStack.isEmpty()) {
         if (detailStack.isEmpty()) {
@@ -219,7 +232,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     var focusAppsGrid by remember { mutableStateOf(false) }
 
     // Bez tła: pod spodem rysuje się domek (OpenGL), który sam czyści ekran na czarno.
-    Box(Modifier.fillMaxSize().alpha(if (trailer != null) 0f else 1f)) {
+    Box(Modifier.fillMaxSize()) {
         // Domek nie rysuje się pod podglądem tytułu ani na czarnym ekranie (oszczędność i zwiastuny).
         if (detailStack.isEmpty() && !blank) {
             HouseWallpaper(
@@ -230,7 +243,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     else -> 1f
                 },
                 mode = settings?.houseMode ?: HouseMode.FULL,
-                showHouse = idle || (tab == TAB_START && !showSettings),
+                showHouse = idle || (tab == TAB_START && !showSettings && !showAllApps),
                 layout = if (idle) Triple(drift.x, 0.14f + drift.y, 2.1f) else Triple(0.5f, 0.12f, 2.0f),
             )
         }
@@ -271,6 +284,15 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
 
             if (showSettings) {
                 Box(Modifier.padding(horizontal = EdgePadding)) { SettingsScreen(settings = settings) }
+            } else if (showAllApps) {
+                AppsScreen(
+                    apps = apps,
+                    favoritePackages = favorites.map { it.packageName }.toSet(),
+                    onLaunch = { app.apps.launch(it.packageName) },
+                    onToggleFavorite = ::toggleFavorite,
+                    focusFirstApp = focusAppsGrid,
+                    onFirstAppFocused = { focusAppsGrid = false },
+                )
             } else {
                 Box(Modifier.padding(horizontal = EdgePadding)) {
                     MainTabs(tabs = Tabs, selected = tab, onSelect = { tab = it }, focusRequesters = tabFocus)
@@ -292,17 +314,10 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                         actions = actions,
                         onOpenAllApps = {
                             focusAppsGrid = true
-                            if (runCatching { tabFocus[TAB_APPS].requestFocus() }.isFailure) tab = TAB_APPS
+                            showAllApps = true
                         },
+                        allAppsFocus = allAppsTile,
                         updateState = updateState,
-                    )
-                    TAB_APPS -> AppsScreen(
-                        apps = apps,
-                        favoritePackages = favorites.map { it.packageName }.toSet(),
-                        onLaunch = { app.apps.launch(it.packageName) },
-                        onToggleFavorite = ::toggleFavorite,
-                        focusFirstApp = focusAppsGrid,
-                        onFirstAppFocused = { focusAppsGrid = false },
                     )
                     TAB_WATCHLIST -> WatchlistScreen(library, feeds, actions)
                     TAB_MOVIES -> MoviesScreen(feeds, actions)
@@ -333,8 +348,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     actions = actions,
                     onOpen = { next -> detailStack = detailStack + next },
                     onClose = { detailStack = detailStack.dropLast(1) },
-                    trailerOpen = trailer != null,
-                    onTrailer = { key, title -> trailer = key to title },
+                    onTrailer = { key, title -> TrailerActivity.open(context, key, title) },
                 )
             }
         }
@@ -350,7 +364,6 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         if (idle && !blank) IdleScreen(haSummary, deepIdle)
     }
 
-    trailer?.let { (key, title) -> TrailerPlayer(key, title, onClose = { trailer = null }) }
 }
 
 @Composable

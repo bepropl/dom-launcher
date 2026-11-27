@@ -45,8 +45,10 @@ fun AppsScreen(
     }
 
     Column(Modifier.fillMaxSize().padding(top = 12.dp, start = EdgePadding, end = EdgePadding)) {
+        Text("Wszystkie aplikacje", fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = Palette.Text)
+        Spacer(Modifier.height(4.dp))
         Text(
-            "OK – uruchom · przytrzymaj OK – dodaj do ekranu Start lub usuń · kolejność ustawisz z telefonu",
+            "OK – uruchom · przytrzymaj OK – dodaj do ekranu Start lub usuń · Wstecz – powrót",
             fontSize = 10.sp,
             color = Palette.Muted,
         )

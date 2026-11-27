@@ -54,6 +54,7 @@ fun StartScreen(
     onOpenAllApps: () -> Unit,
     onReorder: (List<String>) -> Unit,
     autoFocus: Boolean = false,
+    allAppsFocus: FocusRequester? = null,
     onAutoFocused: () -> Unit = {},
     library: Library,
     feeds: Feeds,
@@ -182,7 +183,10 @@ fun StartScreen(
                 )
             }
             item(key = "all") {
-                ActionCard(modifier = Modifier.size(AppTileWidth, AppTileHeight), onClick = onOpenAllApps) {
+                ActionCard(
+                    modifier = Modifier.size(AppTileWidth, AppTileHeight).then(allAppsFocus?.let { Modifier.focusRequester(it) } ?: Modifier),
+                    onClick = onOpenAllApps,
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Wszystkie", fontSize = 11.sp, color = Palette.Text)
                     }

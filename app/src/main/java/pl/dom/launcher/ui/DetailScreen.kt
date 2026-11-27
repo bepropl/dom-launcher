@@ -70,17 +70,15 @@ fun DetailScreen(
     actions: MediaActions,
     onOpen: (DetailRequest) -> Unit,
     onClose: () -> Unit,
-    trailerOpen: Boolean,
     onTrailer: (key: String, title: String) -> Unit,
 ) {
     var reload by remember { mutableIntStateOf(0) }
     val details by produceState<Result<MediaDetails>?>(null, request, reload) {
         value = runCatching { app.media.details(request.type, request.tmdbId) }
     }
-    val trailer = trailerOpen
     val mainButton = remember(request) { FocusRequester() }
 
-    BackHandler(enabled = !trailer, onBack = onClose)
+    BackHandler(onBack = onClose)
 
     Box(
         Modifier
@@ -97,7 +95,7 @@ fun DetailScreen(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
         )
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Palette.Bg, 0.45f to Palette.Bg.copy(alpha = 0.85f), 0.8f to Color.Transparent)))
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Palette.Bg, 0.55f to Palette.Bg.copy(alpha = 0.88f), 0.85f to Color.Transparent)))
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0.45f to Color.Transparent, 1f to Palette.Bg)))
 
         when {
@@ -112,9 +110,9 @@ fun DetailScreen(
         }
     }
 
-    // Po zamknięciu zwiastuna wracamy na przyciski.
-    LaunchedEffect(trailer, details) {
-        if (!trailer && details?.getOrNull() != null) {
+    // Po wczytaniu kursor staje na „Oglądaj”.
+    LaunchedEffect(details) {
+        if (details?.getOrNull() != null) {
             delay(80)
             runCatching { mainButton.requestFocus() }
         }
@@ -135,10 +133,12 @@ private fun DetailContent(
     val onList = library.isOnWatchlist(item.type, item.tmdbId)
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 64.dp, bottom = 24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 48.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(Modifier.padding(start = EdgePadding + 8.dp).width(520.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        // Kolejność jak w Netflixie: tytuł i informacje, od razu pod nimi przyciski, niżej pełny opis.
+        // Dzięki temu kursor na „Oglądaj” nie przewija ekranu i tytuł zawsze jest widoczny.
+        Column(Modifier.padding(start = EdgePadding + 8.dp).fillMaxWidth(0.62f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             item.provider?.let { Text("W serwisie $it", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Palette.Amber) }
             Text(item.title, fontSize = 30.sp, fontWeight = FontWeight.Medium, color = Palette.Text, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val meta = listOfNotNull(
@@ -149,11 +149,6 @@ private fun DetailContent(
                 item.rating?.let { "TMDB %.1f".format(it) },
             )
             Text(meta.joinToString("  ·  "), fontSize = 10.sp, color = Palette.Soft)
-            d.tagline?.let { Text(it, fontSize = 11.sp, fontStyle = FontStyle.Italic, color = Palette.Soft) }
-            if (item.overview.isNotBlank()) {
-                Text(item.overview, fontSize = 11.sp, color = Palette.Text.copy(alpha = 0.9f), maxLines = 5, overflow = TextOverflow.Ellipsis)
-            }
-            if (d.cast.isNotEmpty()) Text("Obsada: " + d.cast.joinToString(", "), fontSize = 9.sp, color = Palette.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
             followed?.let { show ->
                 val next = show.nextToWatch
                 Text(
@@ -185,6 +180,17 @@ private fun DetailContent(
                     Text(if (onList) "Usuń z „Do obejrzenia”" else "+ Do obejrzenia", fontSize = 11.sp)
                 }
             }
+        }
+
+        Column(
+            Modifier.padding(start = EdgePadding + 8.dp, top = 4.dp).fillMaxWidth(0.62f),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            d.tagline?.let { Text(it, fontSize = 11.sp, fontStyle = FontStyle.Italic, color = Palette.Soft) }
+            if (item.overview.isNotBlank()) {
+                Text(item.overview, fontSize = 11.sp, lineHeight = 16.sp, color = Palette.Text.copy(alpha = 0.92f))
+            }
+            if (d.cast.isNotEmpty()) Text("Obsada: " + d.cast.joinToString(", "), fontSize = 9.sp, color = Palette.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
 
         if (item.type == MediaType.TV && d.seasons.isNotEmpty()) {

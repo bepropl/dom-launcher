@@ -79,6 +79,10 @@ class MediaActions(
         if (!justOpenedMenu()) launchEmby()
     }
 
+    /** Wyszukiwanie w zakładkach Filmy / Seriale (tylko dany rodzaj). */
+    suspend fun search(text: String, type: MediaType): List<MediaItem> =
+        media.search(text).filter { it.type == type }
+
     /** OK na plakacie – podgląd tytułu na cały ekran. */
     fun detail(type: MediaType, tmdbId: Int) {
         if (!justOpenedMenu()) openDetail(DetailRequest(type, tmdbId))
@@ -109,6 +113,7 @@ class MediaActions(
             MenuRequest(
                 "${d.item.title} · $code ${ep.name}",
                 buildList {
+                    add(MenuAction(d.item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { watch(d.item.provider, d.item.title) })
                     add(MenuAction("Obejrzane do $code (włącznie)") {
                         run("Zapisano: obejrzane do $code") {
                             if (!followed) media.follow(d.item.tmdbId, caughtUp = false)
@@ -124,7 +129,6 @@ class MediaActions(
                             }
                         })
                     }
-                    add(MenuAction(d.item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { watch(d.item.provider, d.item.title) })
                 },
             ),
         )
