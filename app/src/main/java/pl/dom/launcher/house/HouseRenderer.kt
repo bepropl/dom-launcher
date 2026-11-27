@@ -70,7 +70,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     /** Wielkość i położenie domku na ekranie (offsetX/offsetY w jednostkach ekranu, -1..1). */
     @Volatile var scale = 2.0f
     @Volatile var offsetX = 0.5f
-    @Volatile var offsetY = 0f
+    @Volatile var offsetY = 0.12f
     /** Domek widać tylko na ekranie Start; na innych zakładkach zostają same cząstki. */
     @Volatile var showHouse = true
 
