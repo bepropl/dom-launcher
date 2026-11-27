@@ -81,6 +81,18 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     // Wszystkie aplikacje: osobny ekran otwierany kafelkiem „Wszystkie” na Starcie.
     var showAllApps by rememberSaveable { mutableStateOf(false) }
+    // Panel zębatki (z prawej, jak w Google TV).
+    var showPanel by remember { mutableStateOf(false) }
+    val gearFocus = remember { FocusRequester() }
+    var panelWasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(showPanel) {
+        if (showPanel) panelWasOpen = true
+        else if (panelWasOpen) {
+            panelWasOpen = false
+            delay(150)
+            if (!showSettings) runCatching { gearFocus.requestFocus() }
+        }
+    }
     val allAppsTile = remember { FocusRequester() }
     var returnToAllTile by remember { mutableStateOf(false) }
 
@@ -93,6 +105,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         tab = TAB_START
         showSettings = false
         showAllApps = false
+        showPanel = false
         focusStartApps = true
     }
     LaunchedEffect(showAllApps, returnToAllTile) {
@@ -257,21 +270,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         ) {
             TopBar(
                 modifier = Modifier.padding(horizontal = EdgePadding),
-                onOpenSettings = {
-                    menu = MenuRequest(
-                        "Ustawienia",
-                        listOf(
-                            MenuAction("Ustawienia launchera") { showSettings = true },
-                            MenuAction("Ustawienia Androida") {
-                                runCatching {
-                                    context.startActivity(
-                                        Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                                    )
-                                }
-                            },
-                        ),
-                    )
-                },
+                onOpenSettings = { showPanel = true },
+                settingsFocus = gearFocus,
                 ha = haSummary,
                 haStatus = haStatus,
                 unread = haRecent.count { it.at > seenNotifications },
@@ -355,6 +355,24 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
 
         menu?.let { request -> ActionMenu(request, onDismiss = { menu = null }) }
         if (showNotifications) NotificationsDialog(haRecent, onDismiss = { showNotifications = false })
+
+        SidePanel(
+            visible = showPanel,
+            title = "Ustawienia",
+            items = settingsPanelItems(
+                onLauncher = {
+                    showPanel = false
+                    showSettings = true
+                },
+                onAndroid = {
+                    showPanel = false
+                    runCatching {
+                        context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                },
+            ),
+            onClose = { showPanel = false },
+        )
 
         NotificationPopup(
             app.ha.notifications,

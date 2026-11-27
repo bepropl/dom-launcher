@@ -239,7 +239,15 @@ private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
                         focusedContainerColor = Palette.Amber,
                         focusedContentColor = Palette.OnAmber,
                     ),
-                ) { Text((if (selected) "✓ " else "") + "Sezon $n", fontSize = 10.sp) }
+                ) {
+                    val date = d.seasonYears[n]
+                    val year = when {
+                        date == null -> null
+                        date > java.time.LocalDate.now().toString() -> "wkrótce"
+                        else -> date.take(4)
+                    }
+                    Text((if (selected) "✓ " else "") + "Sezon $n" + (year?.let { " · $it" } ?: ""), fontSize = 10.sp)
+                }
             }
         }
         val list = episodes

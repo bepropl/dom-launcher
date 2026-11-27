@@ -12,18 +12,29 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
-import android.app.AlertDialog
-import android.content.Context
-import android.view.WindowManager
-import android.view.inputmethod.EditorInfo
-import android.widget.EditText
-import android.widget.FrameLayout
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.tv.material3.Border
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.Surface
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.rememberScrollState
@@ -156,71 +167,98 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
 }
 
 /**
- * Pole „Szukaj” na górze zakładek Filmy i Seriale. OK otwiera klawiaturę telewizora
- * (z mikrofonem do dyktowania), wyniki z TMDB pokazują się jako plakaty – OK otwiera podgląd.
+ * Wyszukiwarka na górze zakładek Filmy i Seriale: duże pole na środku.
+ * OK na polu → piszesz od razu w nim (klawiatura telewizora, działa też mikrofon).
+ * Wyniki pojawiają się same, 2 s po ostatniej literze; strzałka w dół przenosi na wyniki.
  */
 @Composable
 private fun SearchSection(type: MediaType, actions: MediaActions) {
-    val context = LocalContext.current
     var query by rememberSaveable(type) { mutableStateOf("") }
-    val results by produceState<Result<List<MediaItem>>?>(null, query) {
+    var searched by rememberSaveable(type) { mutableStateOf("") }
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) delay(2000)
+        searched = query.trim()
+    }
+    val results by produceState<Result<List<MediaItem>>?>(null, searched) {
         value = null
-        value = if (query.isBlank()) null else runCatching { actions.search(query, type) }
+        value = if (searched.isBlank()) null else runCatching { actions.search(searched, type) }
+    }
+    var editing by remember { mutableStateOf(false) }
+    val field = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(editing) {
+        if (editing) {
+            delay(60)
+            runCatching { field.requestFocus() }
+            keyboard?.show()
+        }
     }
     val what = if (type == MediaType.MOVIE) "filmu" else "serialu"
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.padding(start = EdgePadding + 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { askText(context, "Szukaj $what", query) { query = it } }) {
-                Text(if (query.isBlank()) "⌕  Szukaj $what" else "⌕  „$query”", fontSize = 11.sp)
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Surface(
+                onClick = { editing = true },
+                modifier = Modifier.fillMaxWidth(0.6f).height(46.dp),
+                shape = ClickableSurfaceDefaults.shape(shape = RoundedCornerShape(23.dp)),
+                colors = ClickableSurfaceDefaults.colors(
+                    containerColor = Palette.Card.copy(alpha = 0.92f),
+                    contentColor = Palette.Text,
+                    focusedContainerColor = Palette.Card,
+                    focusedContentColor = Palette.Text,
+                ),
+                border = ClickableSurfaceDefaults.border(
+                    focusedBorder = Border(BorderStroke(2.dp, Palette.Amber), shape = RoundedCornerShape(23.dp)),
+                ),
+                scale = ClickableSurfaceDefaults.scale(focusedScale = 1.02f),
+            ) {
+                Row(Modifier.fillMaxSize().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("⌕", fontSize = 18.sp, color = Palette.Amber)
+                    Spacer(Modifier.width(12.dp))
+                    Box(Modifier.weight(1f)) {
+                        if (query.isEmpty()) {
+                            Text(
+                                if (editing) "Wpisz tytuł…" else "Szukaj $what – naciśnij OK",
+                                fontSize = 13.sp, color = Palette.Muted,
+                            )
+                        }
+                        BasicTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            singleLine = true,
+                            textStyle = TextStyle(fontSize = 14.sp, color = Palette.Text),
+                            cursorBrush = SolidColor(Palette.Amber),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                            keyboardActions = KeyboardActions(onSearch = {
+                                searched = query.trim()
+                                keyboard?.hide()
+                            }),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(field)
+                                .focusProperties { canFocus = editing }
+                                .onFocusChanged { if (!it.isFocused && editing) editing = false },
+                        )
+                    }
+                    if (query.isNotEmpty()) {
+                        Spacer(Modifier.width(10.dp))
+                        Text(if (results == null && searched.isNotBlank()) "szukam…" else "", fontSize = 10.sp, color = Palette.Muted)
+                    }
+                }
             }
-            if (query.isNotBlank()) OutlinedButton(onClick = { query = "" }) { Text("Wyczyść", fontSize = 11.sp) }
         }
-        if (query.isNotBlank()) {
+        if (searched.isNotBlank()) {
             val r = results
             when {
-                r == null -> EmptyNote("Szukam…")
+                r == null -> EmptyNote("Szukam „$searched”…")
                 r.isFailure -> EmptyNote(r.exceptionOrNull()?.message ?: "Nie udało się wyszukać")
-                r.getOrThrow().isEmpty() -> EmptyNote("Nic nie znalazłem dla „$query”.")
-                else -> MediaRow("Wyniki wyszukiwania", "OK – szczegóły, obserwuj, + Do obejrzenia") {
+                r.getOrThrow().isEmpty() -> EmptyNote("Nic nie znalazłem dla „$searched”.")
+                else -> MediaRow("Wyniki: „$searched”", "OK – szczegóły, obserwuj, + Do obejrzenia") {
                     items(r.getOrThrow(), key = { "find-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
                 }
             }
         }
     }
-}
-
-/** Okienko z polem tekstowym – systemowa klawiatura telewizora (działa też dyktowanie). */
-private fun askText(context: Context, title: String, initial: String, onResult: (String) -> Unit) {
-    val input = EditText(context).apply {
-        setText(initial)
-        setSelection(initial.length)
-        isSingleLine = true
-        hint = "Tytuł"
-        imeOptions = EditorInfo.IME_ACTION_SEARCH
-    }
-    val box = FrameLayout(context).apply {
-        val pad = (20 * context.resources.displayMetrics.density).toInt()
-        setPadding(pad, pad / 2, pad, 0)
-        addView(input)
-    }
-    val dialog = AlertDialog.Builder(context)
-        .setTitle(title)
-        .setView(box)
-        .setPositiveButton("Szukaj") { _, _ -> onResult(input.text.toString().trim()) }
-        .setNegativeButton("Anuluj", null)
-        .create()
-    input.setOnEditorActionListener { _, id, _ ->
-        if (id == EditorInfo.IME_ACTION_SEARCH || id == EditorInfo.IME_ACTION_DONE || id == EditorInfo.IME_ACTION_GO) {
-            onResult(input.text.toString().trim())
-            dialog.dismiss()
-            true
-        } else {
-            false
-        }
-    }
-    dialog.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
-    dialog.show()
-    input.requestFocus()
 }
 
 /** Zakładka Filmy: wyszukiwarka, wyróżniony film, polecane w Waszych serwisach i biblioteka z Emby. */
@@ -232,10 +270,9 @@ fun MoviesScreen(feeds: Feeds, actions: MediaActions) {
     ) {
         SearchSection(MediaType.MOVIE, actions)
         Problems(feeds)
-        feeds.movies.firstOrNull()?.let { Hero(it, actions) }
-        if (feeds.movies.size > 1) {
+        if (feeds.movies.isNotEmpty()) {
             MediaGrid("Polecane w Waszych serwisach", rows = 2, cellHeight = BigPosterHeight) {
-                gridItems(feeds.movies.drop(1), key = { "m-${it.tmdbId}" }) { item ->
+                gridItems(feeds.movies, key = { "m-${it.tmdbId}" }) { item ->
                     TmdbPoster(item, actions, BigPosterWidth, BigPosterHeight)
                 }
             }
@@ -260,6 +297,13 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
     ) {
         SearchSection(MediaType.TV, actions)
         Problems(feeds)
+        if (feeds.shows.isNotEmpty()) {
+            MediaGrid("Popularne w Waszych serwisach", "OK – szczegóły i zwiastun", rows = 3, cellHeight = PosterHeight) {
+                gridItems(feeds.shows, key = { "s-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
+            }
+        } else if (feeds.loading) {
+            EmptyNote("Wczytuję…")
+        }
         if (library.shows.isNotEmpty()) {
             MediaRow("Obserwowane", "OK – szczegóły i odcinki") {
                 items(library.shows, key = { "f-${it.tmdbId}" }) { show ->
@@ -272,13 +316,6 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions) {
                     )
                 }
             }
-        }
-        if (feeds.shows.isNotEmpty()) {
-            MediaGrid("Popularne w Waszych serwisach", "OK – szczegóły i zwiastun", rows = 3, cellHeight = PosterHeight) {
-                gridItems(feeds.shows, key = { "s-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
-            }
-        } else if (feeds.loading) {
-            EmptyNote("Wczytuję…")
         }
         if (feeds.embyShows.isNotEmpty()) {
             MediaRow("Z Waszej biblioteki na NAS (Emby)") {

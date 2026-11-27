@@ -38,9 +38,16 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import pl.dom.launcher.ha.HaStatus
 import pl.dom.launcher.ha.HaSummary
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun TopBar(
     modifier: Modifier = Modifier,
@@ -49,6 +56,7 @@ fun TopBar(
     haStatus: HaStatus = HaStatus.Off,
     unread: Int = 0,
     onOpenNotifications: () -> Unit = {},
+    settingsFocus: FocusRequester? = null,
 ) {
     val now by rememberNow()
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -89,7 +97,14 @@ fun TopBar(
         Box(Modifier.width(1.dp).height(24.dp).background(Palette.Amber.copy(alpha = 0.25f)))
         Spacer(Modifier.width(14.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Ikony są osiągalne tylko strzałką w górę – strzałka w bok z menu czy z rzędów się na nich zatrzymuje.
+        Row(
+            modifier = Modifier
+                .focusProperties { enter = { if (it == FocusDirection.Up) FocusRequester.Default else FocusRequester.Cancel } }
+                .focusGroup(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Box {
                 RoundIconButton(Icons.Filled.Notifications, "Powiadomienia", onOpenNotifications)
                 if (unread > 0) {
@@ -99,7 +114,10 @@ fun TopBar(
                 }
             }
             WifiIndicator()
-            RoundIconButton(Icons.Filled.Settings, "Ustawienia launchera", onOpenSettings)
+            RoundIconButton(
+                Icons.Filled.Settings, "Ustawienia", onOpenSettings,
+                modifier = settingsFocus?.let { Modifier.focusRequester(it) } ?: Modifier,
+            )
         }
     }
 }
@@ -113,10 +131,10 @@ private fun HaInfo(value: String, label: String) {
 }
 
 @Composable
-fun RoundIconButton(icon: ImageVector, description: String, onClick: () -> Unit) {
+fun RoundIconButton(icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(28.dp),
+        modifier = modifier.size(28.dp),
         shape = ClickableSurfaceDefaults.shape(shape = CircleShape),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Palette.Card.copy(alpha = 0.85f),

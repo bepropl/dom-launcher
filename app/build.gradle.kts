@@ -38,7 +38,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Optymalizacja R8 (szybsze działanie). Na razie tylko w wersji testowej z gałęzi dev
+            // (MINIFY=1 ustawia workflow); wydania OTA z main zostają bez niej, dopóki nie sprawdzimy.
+            val minify = System.getenv("MINIFY") == "1"
+            isMinifyEnabled = minify
+            isShrinkResources = minify
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = if (keystorePath != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }

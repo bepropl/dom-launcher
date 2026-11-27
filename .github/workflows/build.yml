@@ -37,6 +37,8 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          # Optymalizacja R8 na razie tylko w wersji testowej (gałąź dev).
+          MINIFY: ${{ github.ref == 'refs/heads/dev' && '1' || '0' }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease

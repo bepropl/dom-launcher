@@ -76,6 +76,10 @@ class Tmdb(private val key: () -> String?) {
                 val count = s.optInt("episode_count")
                 if (number > 0 && count > 0) number to count else null
             }.toMap() else emptyMap(),
+            seasonYears = if (type == MediaType.TV) o.optJSONArray("seasons").mapObjects { s ->
+                val number = s.optInt("season_number")
+                if (number > 0) number to s.optStringOrNull("air_date") else null
+            }.toMap() else emptyMap(),
             trailerKey = trailer?.optString("key")?.takeIf { it.isNotBlank() },
             recommendations = o.optJSONObject("recommendations")?.optJSONArray("results")
                 .mapObjects { r ->
@@ -114,6 +118,9 @@ class Tmdb(private val key: () -> String?) {
                 "watch_region" to REGION,
                 "with_watch_monetization_types" to "flatrate",
                 "sort_by" to "popularity.desc",
+                // Bez starych tytułów: filmy od 2015, seriale z odcinkami wyemitowanymi od 2015
+                // (stary serial z nowym sezonem się pokaże).
+                (if (type == MediaType.MOVIE) "primary_release_date.gte" else "air_date.gte") to MIN_DATE,
                 "page" to page.toString(),
             ),
         ).optJSONArray("results").mapObjects { parseItem(it, type).copy(provider = provider.name) }
@@ -158,5 +165,6 @@ class Tmdb(private val key: () -> String?) {
 
     companion object {
         const val REGION = "PL"
+        const val MIN_DATE = "2015-01-01"
     }
 }

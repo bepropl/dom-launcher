@@ -60,6 +60,8 @@ data class MediaDetails(
     val runtime: Int?,
     /** Serial: numery sezonów z liczbą odcinków (bez odcinków specjalnych). */
     val seasons: Map<Int, Int>,
+    /** Rok premiery każdego sezonu (null = data nieznana). */
+    val seasonYears: Map<Int, String?> = emptyMap(),
     /** Klucz filmu na YouTube ze zwiastunem. */
     val trailerKey: String?,
     val recommendations: List<MediaItem>,

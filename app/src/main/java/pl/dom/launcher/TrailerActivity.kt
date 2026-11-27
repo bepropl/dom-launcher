@@ -212,13 +212,19 @@ function onYouTubeIframeAPIReady() {
   player = new YT.Player('p', {
     width: '100%', height: '100%', videoId: '__KEY__',
     host: 'https://www.youtube-nocookie.com',
-    playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3, fs: 0, disablekb: 1, hl: 'pl', origin: '__ORIGIN__' },
+    playerVars: { autoplay: 1, controls: 0, rel: 0, modestbranding: 1, playsinline: 1, iv_load_policy: 3, fs: 0, disablekb: 1, cc_load_policy: 0, origin: '__ORIGIN__' },
     events: {
-      onReady: function (e) { e.target.playVideo(); },
-      onStateChange: function (e) { Dom.state(e.data); },
+      onReady: function (e) { noCaptions(e.target); e.target.playVideo(); },
+      onStateChange: function (e) { if (e.data == 1) noCaptions(e.target); Dom.state(e.data); },
       onError: function (e) { Dom.error(e.data); }
     }
   });
+}
+// Napisy YouTube (automatyczne/tłumaczone) wyłączone – zostają tylko te wtopione w film.
+function noCaptions(p) {
+  try { p.setOption('captions', 'track', {}); } catch (x) {}
+  try { p.unloadModule('captions'); } catch (x) {}
+  try { p.unloadModule('cc'); } catch (x) {}
 }
 function toggle() { if (!player) return; if (player.getPlayerState() == 1) player.pauseVideo(); else player.playVideo(); }
 function seek(d) { if (!player) return; player.seekTo(Math.max(0, player.getCurrentTime() + d), true); }
