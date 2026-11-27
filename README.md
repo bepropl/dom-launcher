@@ -6,6 +6,7 @@ Własny ekran główny dla telewizora Sony Bravia z Google TV.
 
 - Ekran **Start**: zegar i data, menu (Start / Do obejrzenia / Filmy / Seriale / Aplikacje), dolny rząd ulubionych aplikacji z **oficjalnymi banerami** pobranymi z telewizora.
 - Zakładka **Aplikacje**: wszystkie aplikacje. OK uruchamia aplikację, a **przytrzymanie OK** dodaje ją do ekranu Start albo z niego usuwa.
+- Ekran **Start**: **przytrzymanie OK** na aplikacji włącza przesuwanie – ◀ ▶ zmienia jej miejsce, OK albo Wstecz zapisuje kolejność.
 - **Dom jako ekran główny**: usługa ułatwień dostępu przejmuje przycisk Home i ekran po włączeniu telewizora (szczegóły w punkcie 3).
 - **Ochrona OLED**: interfejs przesuwa się co kilka minut o kilka pikseli. Po 5 minutach bez pilota (do zmiany) zostaje tylko mały zegar, który też się przesuwa.
 - **Konfiguracja z telefonu**: Ustawienia (zębatka w prawym górnym rogu) pokazują kod QR i PIN. Na telefonie ustawisz kolejność aplikacji, czas spoczynku oraz adresy i klucze Home Assistanta, Emby i TMDB, serwisy streamingowe oraz obserwowane seriale. Klucze są szyfrowane na telewizorze kluczem z Android Keystore.

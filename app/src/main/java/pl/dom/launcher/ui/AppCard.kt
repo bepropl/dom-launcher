@@ -37,6 +37,7 @@ fun AppCard(
     app: TvApp,
     modifier: Modifier = Modifier,
     isFavorite: Boolean = false,
+    moving: Boolean = false,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -46,8 +47,8 @@ fun AppCard(
         modifier = modifier,
         shape = CardDefaults.shape(shape = CardShape),
         colors = CardDefaults.colors(containerColor = Palette.Card, focusedContainerColor = Palette.Card),
-        scale = CardDefaults.scale(focusedScale = 1.08f),
-        border = CardDefaults.border(focusedBorder = Border(BorderStroke(2.dp, Palette.Amber), shape = CardShape)),
+        scale = CardDefaults.scale(focusedScale = if (moving) 1.14f else 1.08f),
+        border = CardDefaults.border(focusedBorder = Border(BorderStroke(if (moving) 3.dp else 2.dp, Palette.Amber), shape = CardShape)),
     ) {
         Box(Modifier.fillMaxSize()) {
             val banner = app.banner
@@ -74,6 +75,14 @@ fun AppCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+            }
+            if (moving) {
+                Box(
+                    Modifier.fillMaxSize().background(Palette.Bg.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("◀   ▶", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Palette.Amber)
                 }
             }
             if (isFavorite) {

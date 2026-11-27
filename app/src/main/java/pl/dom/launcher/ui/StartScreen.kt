@@ -16,6 +16,18 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.activity.compose.BackHandler
+import android.os.SystemClock
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -39,6 +51,7 @@ fun StartScreen(
     favorites: List<TvApp>,
     onLaunch: (TvApp) -> Unit,
     onOpenAllApps: () -> Unit,
+    onReorder: (List<String>) -> Unit,
     library: Library,
     feeds: Feeds,
     actions: MediaActions,
@@ -52,6 +65,45 @@ fun StartScreen(
             runCatching { firstApp.requestFocus() }
         }
     }
+
+    // Sortowanie: przytrzymanie OK na aplikacji → strzałki ◀ ▶ przesuwają ją, OK / Wstecz zapisuje.
+    var moving by remember { mutableStateOf<String?>(null) }
+    var movingSince by remember { mutableLongStateOf(0L) }
+    var order by remember { mutableStateOf<List<TvApp>?>(null) }
+    LaunchedEffect(favorites) { if (moving == null) order = null }
+    val shown = order ?: favorites
+
+    fun finishMove() {
+        val current = order
+        moving = null
+        if (current != null && current.map { it.packageName } != favorites.map { it.packageName }) {
+            onReorder(current.map { it.packageName })
+        }
+    }
+
+    fun moveKey(event: KeyEvent): Boolean {
+        val pkg = moving ?: return false
+        val list = order ?: return false
+        val delta = when (event.key) {
+            Key.DirectionLeft -> -1
+            Key.DirectionRight -> 1
+            Key.DirectionUp, Key.DirectionDown -> {
+                if (event.type == KeyEventType.KeyDown) finishMove()
+                return true
+            }
+            else -> return false
+        }
+        if (event.type == KeyEventType.KeyDown) {
+            val i = list.indexOfFirst { it.packageName == pkg }
+            val j = i + delta
+            if (i >= 0 && j in list.indices) {
+                order = list.toMutableList().apply { add(j, removeAt(i)) }
+            }
+        }
+        return true
+    }
+
+    BackHandler(enabled = moving != null) { finishMove() }
 
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
         val shows = library.showsWithNewEpisodes()
@@ -91,6 +143,8 @@ fun StartScreen(
                     fontSize = 10.sp,
                     color = Palette.Amber,
                 )
+            } else if (moving != null) {
+                Text("Przesuwasz aplikację: ◀ ▶ zmienia miejsce, OK albo Wstecz zapisuje", fontSize = 10.sp, color = Palette.Amber)
             } else {
                 Text("Home Assistant: jeszcze niepodłączony (etap 3)", fontSize = 10.sp, color = Palette.Muted)
             }
@@ -101,13 +155,28 @@ fun StartScreen(
             horizontalArrangement = Arrangement.spacedBy(13.dp),
             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp),
         ) {
-            itemsIndexed(favorites, key = { _, app -> app.packageName }) { index, app ->
+            itemsIndexed(shown, key = { _, app -> app.packageName }) { index, app ->
+                val isMoving = app.packageName == moving
                 AppCard(
                     app = app,
+                    moving = isMoving,
                     modifier = Modifier
                         .size(AppTileWidth, AppTileHeight)
-                        .then(if (index == 0) Modifier.focusRequester(firstApp) else Modifier),
-                    onClick = { onLaunch(app) },
+                        .then(if (index == 0) Modifier.focusRequester(firstApp) else Modifier)
+                        .then(if (isMoving) Modifier.onPreviewKeyEvent(::moveKey) else Modifier),
+                    onClick = {
+                        when {
+                            moving == null -> onLaunch(app)
+                            SystemClock.uptimeMillis() - movingSince > 600 -> finishMove()
+                        }
+                    },
+                    onLongClick = {
+                        if (moving == null) {
+                            order = shown
+                            moving = app.packageName
+                            movingSince = SystemClock.uptimeMillis()
+                        }
+                    },
                 )
             }
             item(key = "all") {

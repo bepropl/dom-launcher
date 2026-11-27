@@ -169,6 +169,12 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     TAB_START -> StartScreen(
                         favorites = favorites,
                         onLaunch = { app.apps.launch(it.packageName) },
+                        onReorder = { packages ->
+                            scope.launch {
+                                app.settings.setFavorites(packages)
+                                toast = "Zapisano kolejność aplikacji"
+                            }
+                        },
                         library = library,
                         feeds = feeds,
                         actions = actions,
