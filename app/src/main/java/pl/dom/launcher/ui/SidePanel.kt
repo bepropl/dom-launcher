@@ -24,6 +24,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Refresh
+import pl.dom.launcher.BuildConfig
+import pl.dom.launcher.update.UpdateState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -123,7 +126,26 @@ fun SidePanel(visible: Boolean, title: String, items: List<PanelItem>, onClose: 
 }
 
 /** Pozycje panelu zębatki. */
-fun settingsPanelItems(onLauncher: () -> Unit, onAndroid: () -> Unit) = listOf(
-    PanelItem("Ustawienia launchera", "Dom: kod QR, domek, wygaszacz, aktualizacje", Icons.Filled.Home, onLauncher),
+fun settingsPanelItems(
+    onLauncher: () -> Unit,
+    onAndroid: () -> Unit,
+    update: UpdateState,
+    onUpdate: () -> Unit,
+) = listOf(
+    PanelItem("Ustawienia launchera", "Dom: kod QR, domek, wygaszacz", Icons.Filled.Home, onLauncher),
     PanelItem("Ustawienia Androida", "Sieć, obraz, dźwięk, aplikacje, system", Icons.Filled.Settings, onAndroid),
+    PanelItem(
+        if (update is UpdateState.Available) "Zainstaluj aktualizację" else "Aktualizacja Dom",
+        when (update) {
+            is UpdateState.Available -> "Dostępna ${update.info.versionName} (masz ${BuildConfig.VERSION_NAME}) – OK instaluje"
+            is UpdateState.Downloading -> "Pobieram… ${(update.progress * 100).toInt()}%"
+            UpdateState.Installing -> "Instaluję – potwierdź na ekranie"
+            UpdateState.Checking -> "Sprawdzam…"
+            UpdateState.UpToDate -> "Masz najnowszą wersję (${BuildConfig.VERSION_NAME})"
+            is UpdateState.Failed -> update.message
+            else -> "Wersja ${BuildConfig.VERSION_NAME} – OK sprawdza"
+        },
+        Icons.Filled.Refresh,
+        onUpdate,
+    ),
 )

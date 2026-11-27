@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import pl.dom.launcher.update.UpdateState
 import kotlin.random.Random
 import pl.dom.launcher.ha.HaSummary
 import pl.dom.launcher.TrailerActivity
@@ -368,6 +369,15 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     showPanel = false
                     runCatching {
                         context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                },
+                update = updateState,
+                onUpdate = {
+                    val available = updateState as? UpdateState.Available
+                    when {
+                        available == null -> scope.launch { app.updater.check() }
+                        app.updater.canInstall() -> scope.launch { app.updater.downloadAndInstall(available.info) }
+                        else -> app.updater.openInstallPermissionSettings()
                     }
                 },
             ),
