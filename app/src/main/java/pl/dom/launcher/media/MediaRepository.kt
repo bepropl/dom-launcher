@@ -111,6 +111,9 @@ class MediaRepository(
                 library.state.value.shows.forEach { show ->
                     runCatching { tmdb.tvDetails(show.tmdbId) }.onSuccess { d -> updateShowDetails(d) }
                 }
+                // Kadr następnego odcinka i czas nadrabiania – także przy starcie (wcześniej tylko co 6 h,
+                // więc po aktualizacji zostawał stary, źle policzony czas).
+                library.state.value.shows.filter { it.started && it.hasNewEpisode }.forEach { runCatching { updateNextInfo(it.tmdbId) } }
                 // Lista „Do obejrzenia”: przy starcie launchera i potem raz na 24 h.
                 runCatching { checkAvailability(s.providers) }
                 runCatching { updateLibraryPosters() }
