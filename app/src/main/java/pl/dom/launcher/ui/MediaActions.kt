@@ -132,6 +132,11 @@ class MediaActions(
         if (watched) run("Zapisano: ${p.episode.label} obejrzany") { media.setWatched(p.tmdbId, p.episode.season, p.episode.number) }
     }
 
+    /** Przycisk „Obejrzany” w podglądzie filmu (przełącza). */
+    fun toggleMovieWatched(item: MediaItem, watched: Boolean) =
+        if (watched) run("Usunięto z obejrzanych") { media.unmarkMovieWatched(item.tmdbId) }
+        else run("„${item.title}” w obejrzanych") { media.markMovieWatched(item.tmdbId, item.title, item.posterPath) }
+
     fun follow(tmdbId: Int, title: String, caughtUp: Boolean) =
         run("Obserwujecie „$title”") { media.follow(tmdbId, caughtUp = caughtUp) }
 
@@ -235,8 +240,8 @@ class MediaActions(
                             }
                         })
                     } else {
-                        add(MenuAction("Obejrzany – usuń z listy") {
-                            run("Usunięto „${entry.title}” z listy") { media.removeFromWatchlist(entry.type, entry.tmdbId) }
+                        add(MenuAction("Obejrzany") {
+                            run("„${entry.title}” w obejrzanych") { media.markMovieWatched(entry.tmdbId, entry.title, entry.posterPath) }
                         })
                     }
                     add(MenuAction(if (entry.followed) "Usuń z listy (przestań obserwować)" else "Usuń z listy") {
@@ -261,7 +266,10 @@ class MediaActions(
                             run("Obserwujecie „${item.title}”") { media.follow(item.tmdbId, caughtUp = false) }
                         })
                     }
-                    add(MenuAction(if (item.type == MediaType.MOVIE) "Obejrzany – usuń z listy" else "Usuń z listy") {
+                    if (item.type == MediaType.MOVIE) {
+                        add(MenuAction("Obejrzany") { run("„${item.title}” w obejrzanych") { media.markMovieWatched(item.tmdbId, item.title, item.posterPath) } })
+                    }
+                    add(MenuAction("Usuń z listy") {
                         run("Usunięto „${item.title}” z listy") { media.removeFromWatchlist(item.type, item.tmdbId) }
                     })
                 },
@@ -288,7 +296,10 @@ class MediaActions(
                             add(MenuAction("Obserwuj – jesteśmy na bieżąco") { run("Obserwujecie „${item.title}”") { media.follow(item.tmdbId, caughtUp = true) } })
                             add(MenuAction("Obserwuj – oglądamy od początku") { run("Obserwujecie „${item.title}”") { media.follow(item.tmdbId, caughtUp = false) } })
                         }
+                    } else if (!lib.isWatched(MediaType.MOVIE, item.tmdbId)) {
+                        add(MenuAction("Obejrzany") { run("„${item.title}” w obejrzanych") { media.markMovieWatched(item.tmdbId, item.title, item.posterPath) } })
                     }
+                    add(MenuAction("Nie interesuje mnie") { run("„${item.title}” nie będzie już polecany") { media.hide(item.type, item.tmdbId, item.title) } })
                 },
             ),
         )

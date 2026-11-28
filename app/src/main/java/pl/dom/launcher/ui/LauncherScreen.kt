@@ -55,6 +55,7 @@ import pl.dom.launcher.data.AppsRepository
 import pl.dom.launcher.data.HouseMode
 import pl.dom.launcher.ha.summarize
 import pl.dom.launcher.data.TvApp
+import pl.dom.launcher.data.SecretStore
 import pl.dom.launcher.service.Interaction
 
 private val Tabs = listOf("Start", "Do obejrzenia", "Filmy", "Seriale")
@@ -86,9 +87,41 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
     var showAllApps by rememberSaveable { mutableStateOf(false) }
     // Panel zębatki (z prawej, jak w Google TV).
     var showPanel by remember { mutableStateOf(false) }
+    var showGuestWifi by remember { mutableStateOf(false) }
+    // Powiadomienie z HA: jedna fala przez domek, potem „oddychanie” raz na minutę, aż otworzycie
+    // dzwonek (najdłużej 2 godziny). Na czarnym ekranie domek i tak się nie rysuje.
+    var houseWave by remember { mutableStateOf(0) }
+    var unreadSince by remember { mutableStateOf(0L) }
+    var houseBreathing by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        app.ha.notifications.collect {
+            houseWave++
+            unreadSince = SystemClock.elapsedRealtime()
+        }
+    }
+    LaunchedEffect(showNotifications) { if (showNotifications) unreadSince = 0L }
+    val breathingEnabled = settings?.houseBreathing ?: true
+    LaunchedEffect(unreadSince, breathingEnabled) {
+        val since = unreadSince
+        if (since == 0L || !breathingEnabled) { houseBreathing = false; return@LaunchedEffect }
+        houseBreathing = true
+        val left = since + 2 * 60 * 60 * 1000L - SystemClock.elapsedRealtime()
+        if (left > 0) kotlinx.coroutines.delay(left)
+        houseBreathing = false
+    }
     val gearFocus = remember { FocusRequester() }
     val bellFocus = remember { FocusRequester() }
     val allAppsTile = remember { FocusRequester() }
+    // „Pokazuj ukryte” sam się wyłącza po wyjściu z „Wszystkich” i po Home.
+    val showHiddenApps by AppsVisibility.showHidden.collectAsStateWithLifecycle()
+    var wasInAllApps by remember { mutableStateOf(false) }
+    LaunchedEffect(showAllApps) {
+        if (showAllApps) wasInAllApps = true
+        else if (wasInAllApps) {
+            wasInAllApps = false
+            AppsVisibility.showHidden.value = false
+        }
+    }
     var returnToAllTile by remember { mutableStateOf(false) }
 
     // Przycisk Home zawsze wraca na Start.
@@ -103,6 +136,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         showSettings = false
         showAllApps = false
         showPanel = false
+        showGuestWifi = false
+        AppsVisibility.showHidden.value = false
         focusStartApps = true
         searchReset++
     }
@@ -269,6 +304,8 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     else -> 1f
                 },
                 brightnessLevel = settings?.houseBrightness ?: 3,
+                waveCount = houseWave,
+                breathing = houseBreathing,
                 mode = settings?.houseMode ?: HouseMode.FULL,
                 showHouse = idle || (tab == TAB_START && !showSettings && !showAllApps),
                 layout = if (idle) Triple(drift.x, 0.14f + drift.y, 2.1f) else Triple(0.5f, 0.12f, 2.0f),
@@ -304,7 +341,25 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     apps = apps,
                     favoritePackages = favorites.map { it.packageName }.toSet(),
                     onLaunch = { app.apps.launch(it.packageName) },
-                    onToggleFavorite = ::toggleFavorite,
+                    onLongPress = { target ->
+                        val hidden = target.packageName in (settings?.hiddenApps ?: emptySet())
+                        val isFav = favorites.any { it.packageName == target.packageName }
+                        menu = MenuRequest(
+                            target.label,
+                            listOf(
+                                MenuAction(if (isFav) "Usuń ze Startu" else "Dodaj do Startu") { toggleFavorite(target) },
+                                MenuAction(if (hidden) "Pokaż na liście" else "Ukryj") {
+                                    scope.launch {
+                                        val current = settings?.hiddenApps ?: emptySet()
+                                        app.settings.setHiddenApps(if (hidden) current - target.packageName else current + target.packageName)
+                                        toast = if (hidden) "„${target.label}” znów na liście" else "Ukryto „${target.label}” – pokażesz ją w ustawieniach launchera"
+                                    }
+                                },
+                            ),
+                        )
+                    },
+                    hiddenPackages = settings?.hiddenApps ?: emptySet(),
+                    showHidden = showHiddenApps,
                     focusFirstApp = focusAppsGrid,
                     onFirstAppFocused = { focusAppsGrid = false },
                 )
@@ -335,7 +390,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                         updateState = updateState,
                     )
                     TAB_WATCHLIST -> WatchlistScreen(library, feeds, actions)
-                    TAB_MOVIES -> MoviesScreen(feeds, actions, searchReset)
+                    TAB_MOVIES -> MoviesScreen(feeds, actions, searchReset, library)
                     TAB_SHOWS -> ShowsScreen(library, feeds, actions, searchReset)
                 } }
             }
@@ -412,6 +467,13 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                         context.startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
                 },
+                guestSsid = settings?.guestSsid?.takeIf { ssid ->
+                    ssid.isNotBlank() && (settings?.guestSecurity == "nopass" || app.secrets.has(SecretStore.GUEST_WIFI))
+                },
+                onGuest = {
+                    showPanel = false
+                    showGuestWifi = true
+                },
                 update = updateState,
                 onUpdate = {
                     val available = updateState as? UpdateState.Available
@@ -428,6 +490,21 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     modifier = if (index == 0) Modifier.focusRequester(first) else Modifier,
                     visible = showPanel,
                 )
+            }
+        }
+
+        SidePanel(
+            visible = showGuestWifi,
+            title = "Wi-Fi dla gości",
+            returnFocus = gearFocus,
+            onClose = { showGuestWifi = false },
+        ) { first, close ->
+            val s = settings
+            if (s != null && s.guestSsid.isNotBlank()) {
+                val qrText = remember(s.guestSsid, s.guestSecurity, s.guestHidden, showGuestWifi) {
+                    guestWifiQrText(s.guestSsid, app.secrets.get(SecretStore.GUEST_WIFI), s.guestSecurity, s.guestHidden)
+                }
+                GuestWifiContent(s.guestSsid, qrText, first, showGuestWifi, close)
             }
         }
 

@@ -280,21 +280,30 @@ private fun SearchSection(type: MediaType, actions: MediaActions, reset: Int) {
 
 /** Zakładka Filmy: wyszukiwarka, wyróżniony film, polecane w Waszych serwisach i biblioteka z Emby. */
 @Composable
-fun MoviesScreen(feeds: Feeds, actions: MediaActions, searchReset: Int = 0) {
+fun MoviesScreen(feeds: Feeds, actions: MediaActions, searchReset: Int = 0, library: Library = Library()) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         SearchSection(MediaType.MOVIE, actions, searchReset)
         Problems(feeds)
-        if (feeds.movies.isNotEmpty()) {
-            MediaGrid("Polecane w Waszych serwisach", rows = 2, cellHeight = BigPosterHeight) {
-                gridItems(feeds.movies, key = { "m-${it.tmdbId}" }) { item ->
+        val movies = feeds.movies.filterNot { library.isHidden(MediaType.MOVIE, it.tmdbId) || library.isWatched(MediaType.MOVIE, it.tmdbId) }
+        if (movies.isNotEmpty()) {
+            MediaGrid("Polecane w Waszych serwisach", "OK – szczegóły, przytrzymaj OK – „Nie interesuje mnie”", rows = 2, cellHeight = BigPosterHeight) {
+                gridItems(movies, key = { "m-${it.tmdbId}" }) { item ->
                     TmdbPoster(item, actions, BigPosterWidth, BigPosterHeight)
                 }
             }
         } else if (feeds.loading) {
             EmptyNote("Wczytuję…")
+        }
+        feeds.becauseMovies?.let { b ->
+            val items = b.items.filterNot { library.isHidden(MediaType.MOVIE, it.tmdbId) || library.isWatched(MediaType.MOVIE, it.tmdbId) }
+            if (items.isNotEmpty()) {
+                MediaRow("Bo oglądaliście „${b.seed}”") {
+                    items(items, key = { "bm-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
+                }
+            }
         }
         if (feeds.embyMovies.isNotEmpty()) {
             MediaRow("Z Waszej biblioteki na NAS (Emby)") {
@@ -315,11 +324,19 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions, searchRes
         SearchSection(MediaType.TV, actions, searchReset)
         Problems(feeds)
         if (feeds.shows.isNotEmpty()) {
-            MediaGrid("Popularne w Waszych serwisach", "OK – szczegóły i zwiastun", rows = 3, cellHeight = PosterHeight) {
-                gridItems(feeds.shows, key = { "s-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
+            MediaGrid("Popularne w Waszych serwisach", "OK – szczegóły, przytrzymaj OK – „Nie interesuje mnie”", rows = 3, cellHeight = PosterHeight) {
+                gridItems(feeds.shows.filterNot { library.isHidden(MediaType.TV, it.tmdbId) }, key = { "s-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
             }
         } else if (feeds.loading) {
             EmptyNote("Wczytuję…")
+        }
+        feeds.becauseShows?.let { b ->
+            val items = b.items.filterNot { library.isHidden(MediaType.TV, it.tmdbId) || library.isFollowed(it.tmdbId) }
+            if (items.isNotEmpty()) {
+                MediaRow("Bo oglądaliście „${b.seed}”") {
+                    items(items, key = { "bs-${it.tmdbId}" }) { item -> TmdbPoster(item, actions) }
+                }
+            }
         }
         if (library.shows.isNotEmpty()) {
             MediaRow("Obserwowane", "OK – szczegóły i odcinki") {

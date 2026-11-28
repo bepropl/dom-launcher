@@ -185,6 +185,16 @@ internal const val CONFIG_PAGE = """<!doctype html>
         <ul class="media" id="watchlist"></ul>
       </div>
       <div class="card">
+        <h2>Obejrzane filmy</h2>
+        <p class="hint">Historia – z niej powstaje rząd „Bo oglądaliście…”.</p>
+        <ul class="media" id="history"></ul>
+      </div>
+      <div class="card">
+        <h2>Ukryte z polecanych</h2>
+        <p class="hint">Tytuły oznaczone na telewizorze „Nie interesuje mnie”.</p>
+        <ul class="media" id="hiddenTitles"></ul>
+      </div>
+      <div class="card">
         <h2>Wasze serwisy</h2>
         <p class="hint" id="provMsg">Dotknij serwisu, żeby go włączyć lub wyłączyć.</p>
         <div id="providers" class="chips"></div>
@@ -228,6 +238,26 @@ internal const val CONFIG_PAGE = """<!doctype html>
         <p class="hint">Rząd na dole ekranu Start. Kolejność zmienisz też na telewizorze – przytrzymaj OK na aplikacji.</p>
         <ul class="media" id="favs"></ul>
         <div id="fAddApp"></div>
+      </div>
+      <div class="card">
+        <h2>Ukryte aplikacje</h2>
+        <p class="hint">Ukryte z listy „Wszystkie” na telewizorze. Dalej działają normalnie.</p>
+        <ul class="media" id="hiddenApps"></ul>
+      </div>
+      <div class="card">
+        <h2>Wi-Fi dla gości</h2>
+        <p class="hint">Na telewizorze: zębatka → „Wi-Fi dla gości” pokaże kod QR do zeskanowania aparatem. Hasło nie jest wyświetlane.</p>
+        <label for="guestSsid">Nazwa sieci</label>
+        <input id="guestSsid" autocomplete="off" placeholder="np. Dom-Goscie">
+        <label for="guest_wifi">Hasło <span class="tag" id="has_guest_wifi"></span></label>
+        <input id="guest_wifi" type="password" autocomplete="off" placeholder="Puste = bez zmian, „-” = usuń">
+        <label for="guestSecurity">Zabezpieczenie</label>
+        <select id="guestSecurity">
+          <option value="WPA">WPA / WPA2</option>
+          <option value="SAE">WPA3</option>
+          <option value="nopass">Sieć otwarta (bez hasła)</option>
+        </select>
+        <label class="row" style="margin-top:12px"><input type="checkbox" id="guestHidden" style="width:auto"> Sieć ukryta (nie rozgłasza nazwy)</label>
       </div>
       <div class="card">
         <h2>Kopia zapasowa</h2>
@@ -539,6 +569,7 @@ internal const val CONFIG_PAGE = """<!doctype html>
     return parts.join(" · ");
   }
   function renderLibrary(lib) {
+    renderExtras(lib);
     var shows = el("shows");
     shows.textContent = "";
     if (!lib.shows.length) shows.appendChild(h("li", "empty", "Jeszcze nic. Wyszukaj serial powyżej."));
@@ -566,6 +597,24 @@ internal const val CONFIG_PAGE = """<!doctype html>
       var r = mediaRow(w.poster, w.title, (w.type === "MOVIE" ? "Film" : "Serial") + (w.provider ? " · " + w.provider : ""));
       r.acts.appendChild(btn("Usuń z listy", "small", function () { return libAction({ action: "unlist", id: w.id, type: w.type }, "Usunięto"); }));
       wl.appendChild(r.li);
+    });
+  }
+  function renderExtras(lib) {
+    var hl = el("history");
+    hl.textContent = "";
+    if (!lib.history || !lib.history.length) hl.appendChild(h("li", "empty", "Jeszcze nic. Na telewizorze: podgląd filmu → „Obejrzany”."));
+    (lib.history || []).forEach(function (w) {
+      var r = mediaRow(w.poster, w.title, "Obejrzany " + w.date);
+      r.acts.appendChild(btn("Usuń z historii", "small", function () { return libAction({ action: "unwatch", id: w.id, type: w.type }, "Usunięto"); }));
+      hl.appendChild(r.li);
+    });
+    var hd = el("hiddenTitles");
+    hd.textContent = "";
+    if (!lib.hidden || !lib.hidden.length) hd.appendChild(h("li", "empty", "Nic nie jest ukryte."));
+    (lib.hidden || []).forEach(function (x) {
+      var r = mediaRow(null, x.title, x.type === "MOVIE" ? "Film" : "Serial");
+      r.acts.appendChild(btn("Przywróć", "small", function () { return libAction({ action: "unhide", id: x.id, type: x.type }, "Przywrócono"); }));
+      hd.appendChild(r.li);
     });
   }
   function loadLibrary() { api("/api/library").then(renderLibrary).catch(fail); }
@@ -626,7 +675,13 @@ internal const val CONFIG_PAGE = """<!doctype html>
   function saveField(body, okText) { return api("/api/save", body).then(function () { toast(okText || "Zapisano ✓"); return loadState(); }).catch(fail); }
   el("haUrl").onchange = function () { saveField({ haUrl: el("haUrl").value.trim() }, "Zapisano adres – łączę…"); haPolls = 0; };
   el("embyUrl").onchange = function () { saveField({ embyUrl: el("embyUrl").value.trim() }); };
-  ["ha_token", "emby_key", "tmdb_key"].forEach(function (name) {
+  function saveGuest() {
+    saveField({ guest: { ssid: el("guestSsid").value.trim(), security: el("guestSecurity").value, hidden: el("guestHidden").checked } });
+  }
+  el("guestSsid").onchange = saveGuest;
+  el("guestSecurity").onchange = saveGuest;
+  el("guestHidden").onchange = saveGuest;
+  ["ha_token", "emby_key", "tmdb_key", "guest_wifi"].forEach(function (name) {
     el(name).onchange = function () {
       var v = el(name).value.trim();
       if (!v) return;
@@ -672,6 +727,25 @@ internal const val CONFIG_PAGE = """<!doctype html>
       var free = state.apps.filter(function (a) { return list.indexOf(a.pkg) < 0; }).map(function (a) { return { id: a.pkg, name: a.label, sub: a.pkg }; });
       picker(addBox, free, function (it) { if (it) saveFavorites(list.concat([it.id]), "Dodano: " + it.name); }, false);
     }));
+  }
+  function renderHiddenApps() {
+    var ul = el("hiddenApps");
+    ul.textContent = "";
+    var hidden = state.hiddenApps || [];
+    function label(pkg) { for (var i = 0; i < state.apps.length; i++) if (state.apps[i].pkg === pkg) return state.apps[i].label; return pkg; }
+    if (!hidden.length) ul.appendChild(h("li", "empty", "Nic nie jest ukryte."));
+    hidden.forEach(function (pkg) {
+      var li = h("li");
+      var info = h("div", "info");
+      info.appendChild(h("div", "title", label(pkg)));
+      var acts = h("div", "acts");
+      acts.appendChild(btn("Pokaż", "small", function () {
+        return saveField({ hiddenApps: hidden.filter(function (p) { return p !== pkg; }) }, "Znów na liście");
+      }));
+      info.appendChild(acts);
+      li.appendChild(info);
+      ul.appendChild(li);
+    });
   }
   el("exportBtn").onclick = function () {
     fetch("/api/export", { headers: { "X-Pin": pin } }).then(function (r) {
@@ -739,8 +813,12 @@ internal const val CONFIG_PAGE = """<!doctype html>
       state = s;
       el("haUrl").value = s.haUrl || "";
       el("embyUrl").value = s.embyUrl || "";
-      ["ha_token", "emby_key", "tmdb_key"].forEach(function (name) { el("has_" + name).textContent = s.secrets[name] ? "zapisany ✓" : ""; });
+      ["ha_token", "emby_key", "tmdb_key", "guest_wifi"].forEach(function (name) { el("has_" + name).textContent = s.secrets[name] ? "zapisany ✓" : ""; });
+      el("guestSsid").value = s.guest.ssid || "";
+      el("guestSecurity").value = s.guest.security || "WPA";
+      el("guestHidden").checked = !!s.guest.hidden;
       renderFavorites();
+      renderHiddenApps();
     });
   }
   function start() {

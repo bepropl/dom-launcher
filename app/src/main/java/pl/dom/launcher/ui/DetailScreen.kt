@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import pl.dom.launcher.media.MediaItem
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -165,6 +167,13 @@ private fun DetailContent(
                 item.rating?.let { "TMDB %.1f".format(it) },
             )
             Text(meta.joinToString("  ·  "), fontSize = 10.sp, color = Palette.Soft)
+            // Film: o której się skończy, gdyby zacząć teraz (odświeża się co minutę).
+            if (item.type == MediaType.MOVIE && d.runtime != null) {
+                val now by rememberNow()
+                val end = now.plusMinutes(d.runtime.toLong())
+                Text("Skończy się o ${end.format(TimeFormat)}", fontSize = 10.sp, color = Palette.Amber)
+            }
+            d.alsoAvailable?.let { Text("Dostępne też: $it", fontSize = 9.sp, color = Palette.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             followed?.let { show ->
                 val next = show.nextToWatch
                 Text(
@@ -189,6 +198,12 @@ private fun DetailContent(
             if (item.type == MediaType.TV) {
                 OutlinedButton(onClick = { actions.menuForFollow(item.tmdbId, item.title, followed != null) }) {
                     Text(if (followed != null) "Obserwujecie ✓" else "Obserwuj…", fontSize = 11.sp)
+                }
+            }
+            if (item.type == MediaType.MOVIE) {
+                val watched = library.isWatched(MediaType.MOVIE, item.tmdbId)
+                OutlinedButton(onClick = { actions.toggleMovieWatched(item, watched) }) {
+                    Text(if (watched) "Obejrzany ✓" else "Obejrzany", fontSize = 11.sp)
                 }
             }
             OutlinedButton(onClick = {
@@ -221,6 +236,9 @@ private fun DetailContent(
         if (item.type == MediaType.TV && d.seasons.isNotEmpty()) {
             Seasons(d, followed, actions)
         }
+
+        // Seria filmów po kolei, z zaznaczeniem obejrzanych.
+        d.collectionId?.let { id -> Collection(id, d.collectionName, item.tmdbId, library, onOpen) }
 
         if (d.recommendations.isNotEmpty()) {
             MediaRow("Podobne") {
@@ -325,6 +343,30 @@ private fun Seasons(d: MediaDetails, followed: FollowedShow?, actions: MediaActi
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun Collection(id: Int, name: String?, currentId: Int, library: Library, onOpen: (DetailRequest) -> Unit) {
+    val app = LauncherApp.from(androidx.compose.ui.platform.LocalContext.current)
+    val parts by produceState<List<MediaItem>?>(null, id) {
+        value = runCatching { app.media.collection(id).second }.getOrNull()
+    }
+    val list = parts?.takeIf { it.size > 1 } ?: return
+    MediaRow("Seria: ${name ?: "filmy"}", "${list.size} części, po kolei") {
+        itemsIndexed(list, key = { _, it -> "col-${it.tmdbId}" }) { index, part ->
+            PosterCard(
+                title = part.title,
+                label = when {
+                    part.tmdbId == currentId -> "Ten film"
+                    library.isWatched(MediaType.MOVIE, part.tmdbId) -> "${index + 1}. · obejrzany ✓"
+                    else -> listOfNotNull("${index + 1}.", part.year).joinToString(" · ")
+                },
+                labelStrong = part.tmdbId == currentId,
+                imageUrl = TmdbImages.poster(part.posterPath),
+                onClick = { if (part.tmdbId != currentId) onOpen(DetailRequest(MediaType.MOVIE, part.tmdbId)) },
+            )
         }
     }
 }

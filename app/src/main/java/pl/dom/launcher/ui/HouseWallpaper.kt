@@ -45,6 +45,9 @@ fun HouseWallpaper(
     layout: Triple<Float, Float, Float> = Triple(0.5f, 0.12f, 2.0f),
     /** Poziom jasności 1–5 z ustawień. */
     brightnessLevel: Int = 3,
+    /** Zmiana = jedna fala przez domek. */
+    waveCount: Int = 0,
+    breathing: Boolean = false,
 ) {
     if (mode == HouseMode.OFF) {
         Box(modifier)
@@ -65,6 +68,8 @@ fun HouseWallpaper(
 
     renderer.dim = dim
     renderer.showHouse = showHouse
+    renderer.waveCount = waveCount
+    renderer.breathing = breathing
     renderer.brightness = HouseBrightness.multiplier(brightnessLevel)
     renderer.offsetX = layout.first
     renderer.offsetY = layout.second

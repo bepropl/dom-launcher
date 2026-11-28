@@ -122,7 +122,20 @@ data class ToWatch(
     val isNew: Boolean get() = newSince > 0 && System.currentTimeMillis() - newSince < 4 * 24 * 3600_000L
 }
 
-data class Library(val shows: List<FollowedShow> = emptyList(), val watchlist: List<WatchItem> = emptyList()) {
+/** Obejrzany film (historia „Obejrzane”, zasila „Bo oglądaliście…”). */
+data class WatchedItem(val tmdbId: Int, val type: MediaType, val title: String, val posterPath: String?, val watchedAt: Long)
+
+/** Tytuł ukryty z polecanych („Nie interesuje mnie”). */
+data class HiddenItem(val tmdbId: Int, val type: MediaType, val title: String)
+
+data class Library(
+    val shows: List<FollowedShow> = emptyList(),
+    val watchlist: List<WatchItem> = emptyList(),
+    val history: List<WatchedItem> = emptyList(),
+    val hidden: List<HiddenItem> = emptyList(),
+) {
+    fun isWatched(type: MediaType, id: Int) = history.any { it.tmdbId == id && it.type == type }
+    fun isHidden(type: MediaType, id: Int) = hidden.any { it.tmdbId == id && it.type == type }
     fun isFollowed(id: Int) = shows.any { it.tmdbId == id }
     fun isOnWatchlist(type: MediaType, id: Int) = watchlist.any { it.tmdbId == id && it.type == type }
 
@@ -190,6 +203,13 @@ class LibraryStore(context: Context) {
                 .put("releaseDate", w.releaseDate ?: JSONObject.NULL)
                 .put("mine", w.mine).put("newSince", w.newSince).put("checkedAt", w.checkedAt)
         }))
+        .put("history", JSONArray(lib.history.map { h ->
+            JSONObject().put("tmdbId", h.tmdbId).put("type", h.type.name).put("title", h.title)
+                .put("poster", h.posterPath ?: JSONObject.NULL).put("watchedAt", h.watchedAt)
+        }))
+        .put("hidden", JSONArray(lib.hidden.map { h ->
+            JSONObject().put("tmdbId", h.tmdbId).put("type", h.type.name).put("title", h.title)
+        }))
 
     private fun fromJson(o: JSONObject) = Library(
         shows = o.optJSONArray("shows").mapObjects { s ->
@@ -233,6 +253,18 @@ class LibraryStore(context: Context) {
                 checkedAt = w.optLong("checkedAt"),
             )
         },
+        history = o.optJSONArray("history").mapObjects { h ->
+            WatchedItem(
+                h.optInt("tmdbId"),
+                runCatching { MediaType.valueOf(h.optString("type")) }.getOrDefault(MediaType.MOVIE),
+                h.optString("title"),
+                h.optStringOrNull("poster"),
+                h.optLong("watchedAt"),
+            )
+        },
+        hidden = o.optJSONArray("hidden").mapObjects { h ->
+            HiddenItem(h.optInt("tmdbId"), runCatching { MediaType.valueOf(h.optString("type")) }.getOrDefault(MediaType.MOVIE), h.optString("title"))
+        }
     )
 
     private fun episodeJson(e: Episode) = JSONObject().put("s", e.season).put("e", e.number).put("date", e.airDate ?: JSONObject.NULL)

@@ -237,6 +237,14 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
                     .put("poster", TmdbImages.poster(item.posterPath) ?: JSONObject.NULL)
                     .put("provider", item.provider ?: JSONObject.NULL)
             }))
+            .put("history", JSONArray(lib.history.map { h ->
+                JSONObject().put("id", h.tmdbId).put("type", h.type.name).put("title", h.title)
+                    .put("poster", TmdbImages.poster(h.posterPath) ?: JSONObject.NULL)
+                    .put("date", java.text.SimpleDateFormat("d.MM.yyyy", java.util.Locale.forLanguageTag("pl-PL")).format(java.util.Date(h.watchedAt)))
+            }))
+            .put("hidden", JSONArray(lib.hidden.map { h ->
+                JSONObject().put("id", h.tmdbId).put("type", h.type.name).put("title", h.title)
+            }))
     }
 
     private fun providers(): JSONObject = runBlocking {
@@ -281,6 +289,9 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
             "next" -> media.markNextWatched(id)
             "list" -> media.addToWatchlist(type, id)
             "unlist" -> media.removeFromWatchlist(type, id)
+            "movieWatched" -> media.markMovieWatched(id)
+            "unwatch" -> media.unmarkMovieWatched(id)
+            "unhide" -> media.unhide(type, id)
             else -> throw IllegalArgumentException("Nieznana akcja")
         }
     }
@@ -297,6 +308,8 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
             .put("apps", JSONArray(all.map { JSONObject().put("pkg", it.packageName).put("label", it.label) }))
             .put("secrets", JSONObject().apply { SecretStore.ALL.forEach { put(it, app.secrets.has(it)) } })
             .put("ha", haStatusJson())
+            .put("hiddenApps", JSONArray(s.hiddenApps.toList()))
+            .put("guest", JSONObject().put("ssid", s.guestSsid).put("security", s.guestSecurity).put("hidden", s.guestHidden))
     }
 
     private fun save(body: JSONObject) = runBlocking {
@@ -306,6 +319,17 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
         if (body.has("embyUrl")) s.setEmbyUrl(body.getString("embyUrl"))
         body.optJSONArray("favorites")?.let { arr ->
             s.setFavorites((0 until arr.length()).map { arr.getString(it) })
+        }
+        body.optJSONArray("hiddenApps")?.let { arr ->
+            s.setHiddenApps((0 until arr.length()).map { arr.getString(it) }.toSet())
+        }
+        body.optJSONObject("guest")?.let { g ->
+            val current = s.current()
+            s.setGuestWifi(
+                g.optString("ssid", current.guestSsid).trim(),
+                g.optString("security", current.guestSecurity),
+                if (g.has("hidden")) g.optBoolean("hidden") else current.guestHidden,
+            )
         }
         // Sekrety: pusty tekst = bez zmian, "-" = usuń.
         body.optJSONObject("secrets")?.let { sec ->

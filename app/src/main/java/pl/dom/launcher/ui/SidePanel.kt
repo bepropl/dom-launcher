@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
@@ -175,9 +176,12 @@ fun settingsPanelItems(
     onAndroid: () -> Unit,
     update: UpdateState,
     onUpdate: () -> Unit,
-) = listOf(
+    guestSsid: String? = null,
+    onGuest: () -> Unit = {},
+) = listOfNotNull(
     PanelItem("Ustawienia launchera", "Dom: kod QR, domek, wygaszacz", Icons.Filled.Home, onLauncher),
     PanelItem("Ustawienia Androida", "Sieć, obraz, dźwięk, aplikacje, system", Icons.Filled.Settings, onAndroid),
+    guestSsid?.let { PanelItem("Wi-Fi dla gości", "Kod QR do sieci „$it”", Icons.Filled.Lock, onGuest) },
     PanelItem(
         if (update is UpdateState.Available) "Zainstaluj aktualizację" else "Aktualizacja Dom",
         when (update) {
@@ -193,6 +197,29 @@ fun settingsPanelItems(
         onUpdate,
     ),
 )
+
+/** Tekst kodu QR sieci Wi-Fi (format WIFI:, rozumiany przez aparat w iPhonie i Androidzie). */
+fun guestWifiQrText(ssid: String, password: String?, security: String, hidden: Boolean): String {
+    fun esc(v: String) = v.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace(":", "\\:").replace("\"", "\\\"")
+    val t = if (security == "nopass" || password.isNullOrEmpty()) "nopass" else security
+    val p = if (t == "nopass") "" else "P:${esc(password!!)};"
+    return "WIFI:T:$t;S:${esc(ssid)};$p${if (hidden) "H:true;" else ""};"
+}
+
+/** Panel z dużym kodem QR sieci dla gości – samo SSID, bez hasła na ekranie. */
+@Composable
+fun ColumnScope.GuestWifiContent(ssid: String, qrText: String, first: FocusRequester, visible: Boolean, close: () -> Unit) {
+    val qr = remember(qrText) { pl.dom.launcher.config.qrBitmap(qrText, 512) }
+    Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+        Image(qr, contentDescription = "Kod QR sieci $ssid", modifier = Modifier.size(220.dp).clip(RoundedCornerShape(8.dp)))
+    }
+    Text(ssid, fontSize = 16.sp, color = Palette.Text, modifier = Modifier.align(Alignment.CenterHorizontally))
+    Text(
+        "Zeskanujcie aparatem w telefonie – połączy się samo.",
+        fontSize = 10.sp, color = Palette.Soft, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 10.dp),
+    )
+    PanelRow("Zamknij", null, null, close, modifier = Modifier.focusRequester(first), visible = visible)
+}
 
 private val PanelTime = SimpleDateFormat("HH:mm", Locale.forLanguageTag("pl-PL"))
 

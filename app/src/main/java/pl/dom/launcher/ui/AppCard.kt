@@ -16,6 +16,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -38,6 +40,8 @@ fun AppCard(
     modifier: Modifier = Modifier,
     isFavorite: Boolean = false,
     moving: Boolean = false,
+    /** Ukryta (widoczna tylko przy „Pokazuj ukryte”) – przygaszona, ze znaczkiem. */
+    hidden: Boolean = false,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
 ) {
@@ -50,7 +54,7 @@ fun AppCard(
         scale = CardDefaults.scale(focusedScale = if (moving) 1.14f else 1.08f),
         border = CardDefaults.border(focusedBorder = Border(BorderStroke(if (moving) 3.dp else 2.dp, Palette.Amber), shape = CardShape)),
     ) {
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().alpha(if (hidden) 0.4f else 1f)) {
             val banner = app.banner
             if (banner != null) {
                 Image(
@@ -76,6 +80,13 @@ fun AppCard(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+            if (hidden) {
+                Text(
+                    "ukryta",
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp).background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+                    fontSize = 7.sp, color = Palette.Soft,
+                )
             }
             if (moving) {
                 Box(

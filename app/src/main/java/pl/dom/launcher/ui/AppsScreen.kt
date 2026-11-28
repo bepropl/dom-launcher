@@ -24,13 +24,20 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Text
 import pl.dom.launcher.data.TvApp
 
-/** Wszystkie aplikacje. OK uruchamia, przytrzymanie OK dodaje/usuwa z dolnego rzędu na Starcie. */
+/** Czy „Wszystkie” pokazują też ukryte aplikacje (przełącznik w ustawieniach; sam się wyłącza). */
+object AppsVisibility {
+    val showHidden = kotlinx.coroutines.flow.MutableStateFlow(false)
+}
+
+/** Wszystkie aplikacje. OK uruchamia, przytrzymanie OK – menu (Start, ukryj). */
 @Composable
 fun AppsScreen(
     apps: List<TvApp>,
     favoritePackages: Set<String>,
     onLaunch: (TvApp) -> Unit,
-    onToggleFavorite: (TvApp) -> Unit,
+    onLongPress: (TvApp) -> Unit,
+    hiddenPackages: Set<String> = emptySet(),
+    showHidden: Boolean = false,
     focusFirstApp: Boolean = false,
     onFirstAppFocused: () -> Unit = {},
 ) {
@@ -48,7 +55,8 @@ fun AppsScreen(
         Text("Wszystkie aplikacje", fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, color = Palette.Text)
         Spacer(Modifier.height(4.dp))
         Text(
-            "OK – uruchom · przytrzymaj OK – dodaj do ekranu Start lub usuń · Wstecz – powrót",
+            if (showHidden) "Widać też ukryte aplikacje (przygaszone) – przytrzymaj OK → „Pokaż”, żeby wróciła na listę"
+            else "OK – uruchom · przytrzymaj OK – Start / ukryj · Wstecz – powrót",
             fontSize = 10.sp,
             color = Palette.Muted,
         )
@@ -59,16 +67,18 @@ fun AppsScreen(
             verticalArrangement = Arrangement.spacedBy(13.dp),
             contentPadding = PaddingValues(6.dp),
         ) {
-            items(apps, key = { it.packageName }) { app ->
+            val visible = if (showHidden) apps else apps.filterNot { it.packageName in hiddenPackages }
+            items(visible, key = { it.packageName }) { app ->
                 AppCard(
                     app = app,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(16f / 9f)
-                        .then(if (app.packageName == apps.firstOrNull()?.packageName) Modifier.focusRequester(firstApp) else Modifier),
+                        .then(if (app.packageName == visible.firstOrNull()?.packageName) Modifier.focusRequester(firstApp) else Modifier),
                     isFavorite = app.packageName in favoritePackages,
+                    hidden = app.packageName in hiddenPackages,
                     onClick = { onLaunch(app) },
-                    onLongClick = { onToggleFavorite(app) },
+                    onLongClick = { onLongPress(app) },
                 )
             }
         }

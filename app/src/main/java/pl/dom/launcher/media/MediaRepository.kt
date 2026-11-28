@@ -19,6 +19,9 @@ data class Feeds(
     val embyResume: List<EmbyItem> = emptyList(),
     val embyMovies: List<EmbyItem> = emptyList(),
     val embyShows: List<EmbyItem> = emptyList(),
+    /** „Bo oglądaliście…” w Filmach i Serialach. */
+    val becauseMovies: Because? = null,
+    val becauseShows: Because? = null,
     /** Komunikaty o brakach w konfiguracji albo błędach połączenia. */
     val problems: List<String> = emptyList(),
     val loading: Boolean = false,
@@ -96,6 +99,8 @@ class MediaRepository(
             val s = settings.current()
             var movies = emptyList<MediaItem>()
             var shows = emptyList<MediaItem>()
+            var becauseMovies: Because? = null
+            var becauseShows: Because? = null
             if (!hasTmdbKey) {
                 problems += "Wpisz klucz TMDB na stronie konfiguracji w telefonie (zębatka → kod QR)."
             } else {
@@ -114,6 +119,10 @@ class MediaRepository(
                     // Polskie okładki tam, gdzie TMDB je ma.
                     movies = runCatching { polish.apply(movies) }.getOrDefault(movies)
                     shows = runCatching { polish.apply(shows) }.getOrDefault(shows)
+                    becauseMovies = runCatching { because(MediaType.MOVIE, s.providers) }.getOrNull()
+                        ?.let { b -> b.copy(items = runCatching { polish.apply(b.items) }.getOrDefault(b.items)) }
+                    becauseShows = runCatching { because(MediaType.TV, s.providers) }.getOrNull()
+                        ?.let { b -> b.copy(items = runCatching { polish.apply(b.items) }.getOrDefault(b.items)) }
                     if (movies.isEmpty() && shows.isEmpty()) problems += "TMDB nie odpowiada – sprawdź klucz i połączenie."
                 }
             }
@@ -127,7 +136,7 @@ class MediaRepository(
                     embyShows = emby.latest(movies = false)
                 }.onFailure { problems += "Nie mogę połączyć się z Emby: ${it.message}" }
             }
-            Feeds(movies, shows, resume, embyMovies, embyShows, problems, loading = false)
+            Feeds(movies, shows, resume, embyMovies, embyShows, becauseMovies, becauseShows, problems, loading = false)
         }
         lastRefreshAt = System.currentTimeMillis()
         lastShowsAt = lastRefreshAt
@@ -168,9 +177,77 @@ class MediaRepository(
     /** Szczegóły do ekranu podglądu, z serwisem, w którym tytuł jest dostępny. */
     suspend fun details(type: MediaType, tmdbId: Int): MediaDetails = withContext(Dispatchers.IO) {
         val details = tmdb.details(type, tmdbId)
-        val mine = settings.current().providers
-        val provider = runCatching { tmdb.providerFor(type, tmdbId, mine) }.getOrNull()
-        details.copy(item = details.item.copy(provider = provider))
+        val mineIds = settings.current().providers.map { it.id }.toSet()
+        val ours = details.offersFlatrate.firstOrNull { it.first in mineIds }
+        val provider = ours?.second ?: details.offersFlatrate.firstOrNull()?.second
+        // „Dostępne też: Max · wypożyczenie: Apple TV, Google Play · kupno: …”
+        val otherFlat = details.offersFlatrate.filter { it.first !in mineIds && it.second != provider }.map { it.second }.distinct()
+        val parts = listOfNotNull(
+            otherFlat.take(3).joinToString(", ").ifBlank { null },
+            details.offersRent.distinct().take(3).joinToString(", ").ifBlank { null }?.let { "wypożyczenie: $it" },
+            details.offersBuy.distinct().take(3).joinToString(", ").ifBlank { null }?.let { "kupno: $it" },
+        )
+        details.copy(
+            item = details.item.copy(provider = provider),
+            alsoAvailable = parts.joinToString(" · ").ifBlank { null },
+        )
+    }
+
+    suspend fun collection(id: Int): Pair<String, List<MediaItem>> = withContext(Dispatchers.IO) {
+        val (name, parts) = tmdb.collection(id)
+        name to runCatching { polish.apply(parts) }.getOrDefault(parts)
+    }
+
+    /** Film obejrzany: trafia do historii i znika z listy „Do obejrzenia”. */
+    suspend fun markMovieWatched(tmdbId: Int, title: String? = null, posterPath: String? = null) {
+        val known = library.state.value.watchlist.firstOrNull { it.tmdbId == tmdbId && it.type == MediaType.MOVIE }
+        val (t, p) = when {
+            title != null -> title to posterPath
+            known != null -> known.title to known.posterPath
+            else -> withContext(Dispatchers.IO) { tmdb.item(MediaType.MOVIE, tmdbId).let { it.title to it.posterPath } }
+        }
+        val now = System.currentTimeMillis()
+        library.update { lib ->
+            lib.copy(
+                history = listOf(WatchedItem(tmdbId, MediaType.MOVIE, t, p, now)) + lib.history.filterNot { it.tmdbId == tmdbId && it.type == MediaType.MOVIE },
+                watchlist = lib.watchlist.filterNot { it.tmdbId == tmdbId && it.type == MediaType.MOVIE },
+            )
+        }
+    }
+
+    suspend fun unmarkMovieWatched(tmdbId: Int) = library.update { lib ->
+        lib.copy(history = lib.history.filterNot { it.tmdbId == tmdbId && it.type == MediaType.MOVIE })
+    }
+
+    /** „Nie interesuje mnie” – tytuł znika z polecanych. */
+    suspend fun hide(type: MediaType, tmdbId: Int, title: String) = library.update { lib ->
+        if (lib.isHidden(type, tmdbId)) lib else lib.copy(hidden = lib.hidden + HiddenItem(tmdbId, type, title))
+    }
+
+    suspend fun unhide(type: MediaType, tmdbId: Int) = library.update { lib ->
+        lib.copy(hidden = lib.hidden.filterNot { it.tmdbId == tmdbId && it.type == type })
+    }
+
+    /**
+     * „Bo oglądaliście X”: propozycje TMDB do ostatnio obejrzanego filmu / ostatnio oglądanego serialu,
+     * tylko od 2015, tylko w Waszych serwisach i bez tego, co już znacie albo ukryliście.
+     */
+    private fun because(type: MediaType, providers: List<StreamingProvider>): Because? {
+        val lib = library.state.value
+        val seed = if (type == MediaType.MOVIE) {
+            lib.history.firstOrNull { it.type == MediaType.MOVIE }?.let { it.tmdbId to it.title }
+        } else {
+            lib.shows.filter { it.started }.maxByOrNull { it.watchedAt }?.let { it.tmdbId to it.name }
+        } ?: return null
+        val candidates = runCatching { tmdb.recommendations(type, seed.first) }.getOrDefault(emptyList())
+            .filter { (it.releaseDate ?: "") >= Tmdb.MIN_DATE }
+            .filterNot { lib.isHidden(type, it.tmdbId) || lib.isOnWatchlist(type, it.tmdbId) || lib.isWatched(type, it.tmdbId) || (type == MediaType.TV && lib.isFollowed(it.tmdbId)) }
+            .take(20)
+        val items = candidates.mapNotNull { item ->
+            val av = runCatching { tmdb.availability(type, item.tmdbId, providers) }.getOrNull() ?: return@mapNotNull null
+            if (av.mine) item.copy(provider = av.provider) else null
+        }
+        return if (items.isEmpty()) null else Because(seed.second, items)
     }
 
     suspend fun season(tmdbId: Int, season: Int): List<SeasonEpisode> = withContext(Dispatchers.IO) { tmdb.season(tmdbId, season) }

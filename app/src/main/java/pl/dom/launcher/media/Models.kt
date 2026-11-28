@@ -89,7 +89,19 @@ data class MediaDetails(
     val trailerKey: String?,
     val recommendations: List<MediaItem>,
     val cast: List<String>,
+    /** Seria filmów (TMDB „collection”), do której należy film. */
+    val collectionId: Int? = null,
+    val collectionName: String? = null,
+    /** Gdzie jeszcze można obejrzeć (Polska): abonament, wypożyczenie, kupno – (id serwisu, nazwa). */
+    val offersFlatrate: List<Pair<Int, String>> = emptyList(),
+    val offersRent: List<String> = emptyList(),
+    val offersBuy: List<String> = emptyList(),
+    /** „Dostępne też: …” – wyliczone dla Waszych serwisów. */
+    val alsoAvailable: String? = null,
 )
+
+/** „Bo oglądaliście X” – propozycje na podstawie tytułu, który już znacie. */
+data class Because(val seed: String, val items: List<MediaItem>)
 
 /** Odcinek z listy sezonu. */
 data class SeasonEpisode(

@@ -171,6 +171,10 @@ fun SettingsScreen(settings: LauncherSettings?) {
                     }
                 }
             }
+            val breathing = settings?.houseBreathing ?: true
+            Button(onClick = { scope.launch { app.settings.setHouseBreathing(!breathing) } }) {
+                Text((if (breathing) "✓ " else "") + "Domek „oddycha” przy nieprzeczytanych powiadomieniach", fontSize = 11.sp)
+            }
             val level = settings?.houseBrightness ?: 3
             Text("Jasność domku: $level z 5", fontSize = 10.sp, color = Palette.Soft)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -179,6 +183,20 @@ fun SettingsScreen(settings: LauncherSettings?) {
                         Text(if (l == level) "✓ $l" else "$l", fontSize = 11.sp)
                     }
                 }
+            }
+        }
+
+        Section {
+            Text("Aplikacje", fontSize = 14.sp, fontWeight = FontWeight.Medium, color = Palette.Text)
+            val hiddenCount = settings?.hiddenApps?.size ?: 0
+            val showHidden by AppsVisibility.showHidden.collectAsState()
+            Text(
+                if (hiddenCount == 0) "Nic nie jest ukryte. Aplikację ukryjesz w „Wszystkich”: przytrzymaj OK → „Ukryj”."
+                else "Ukryte aplikacje: $hiddenCount. Po włączeniu widać je w „Wszystkich” (przygaszone) – przytrzymaj OK → „Pokaż na liście”. Wyłącza się samo po wyjściu z listy.",
+                fontSize = 10.sp, color = Palette.Soft,
+            )
+            Button(onClick = { AppsVisibility.showHidden.value = !showHidden }) {
+                Text((if (showHidden) "✓ " else "") + "Pokazuj ukryte aplikacje", fontSize = 11.sp)
             }
         }
 

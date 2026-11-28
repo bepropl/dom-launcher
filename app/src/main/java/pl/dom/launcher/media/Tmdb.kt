@@ -54,7 +54,7 @@ class Tmdb(private val key: () -> String?) {
     fun details(type: MediaType, id: Int): MediaDetails {
         val o = get(
             if (type == MediaType.MOVIE) "/movie/$id" else "/tv/$id",
-            mapOf("append_to_response" to "videos,recommendations,credits", "include_video_language" to "pl,en,null"),
+            mapOf("append_to_response" to "videos,recommendations,credits,watch/providers", "include_video_language" to "pl,en,null"),
         )
         val videos = o.optJSONObject("videos")?.optJSONArray("results").mapObjects { v ->
             if (v.optString("site") == "YouTube") v else null
@@ -100,8 +100,31 @@ class Tmdb(private val key: () -> String?) {
                     }
                 }.take(20),
             cast = o.optJSONObject("credits")?.optJSONArray("cast").mapObjects { it.optString("name").takeIf { n -> n.isNotBlank() } }.take(6),
+            collectionId = o.optJSONObject("belongs_to_collection")?.optInt("id")?.takeIf { it > 0 },
+            collectionName = o.optJSONObject("belongs_to_collection")?.optString("name")?.takeIf { it.isNotBlank() },
+            offersFlatrate = offers(o, "flatrate").map { it.first to it.second } + offers(o, "free") + offers(o, "ads"),
+            offersRent = offers(o, "rent").map { it.second },
+            offersBuy = offers(o, "buy").map { it.second },
         )
     }
+
+    private fun offers(o: JSONObject, kind: String): List<Pair<Int, String>> =
+        o.optJSONObject("watch/providers")?.optJSONObject("results")?.optJSONObject(REGION)?.optJSONArray(kind)
+            .mapObjects { p -> p.optInt("provider_id") to p.optString("provider_name") }
+            .filter { it.second.isNotBlank() }
+
+    /** Wszystkie filmy serii, po kolei (od najstarszego). */
+    fun collection(id: Int): Pair<String, List<MediaItem>> {
+        val o = get("/collection/$id")
+        val parts = o.optJSONArray("parts").mapObjects { parseItem(it, MediaType.MOVIE) }
+            .sortedBy { it.releaseDate ?: "9999" }
+        return o.optString("name") to parts
+    }
+
+    /** Propozycje TMDB „podobne do” danego tytułu. */
+    fun recommendations(type: MediaType, id: Int): List<MediaItem> =
+        get(if (type == MediaType.MOVIE) "/movie/$id/recommendations" else "/tv/$id/recommendations")
+            .optJSONArray("results").mapObjects { parseItem(it, type) }
 
     /** Najwyżej oceniona polska okładka z TMDB (null = brak polskiej). */
     fun polishPoster(type: MediaType, id: Int): String? {

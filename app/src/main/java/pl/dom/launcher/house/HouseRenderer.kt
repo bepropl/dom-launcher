@@ -9,6 +9,7 @@ import java.nio.FloatBuffer
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.min
+import kotlin.math.sin
 
 /**
  * Pokoje w modelu (numer = numer strefy światła w pliku house.bin).
@@ -75,6 +76,14 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     @Volatile var showHouse = true
     /** Jasność domku z ustawień (mnożnik, ok. 0,7–2). */
     @Volatile var brightness = 1.3f
+    /** Każda zmiana licznika puszcza jedną falę przez domek. */
+    @Volatile var waveCount = 0
+    /** Czy domek ma „oddychać” (raz na minutę) – nieprzeczytane powiadomienia. */
+    @Volatile var breathing = false
+    private var seenWave = 0
+    private var waveStart = -100f
+    private var breathStart = 0f
+    private var uWave = 0; private var uBreath = 0
 
     // Aktualne położenie – płynnie dociąga do scale/offsetX/offsetY (np. przejście do wygaszacza).
     private var curScale = Float.NaN
@@ -114,6 +123,8 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         uOff = GLES20.glGetUniformLocation(program, "off")
         uOffX = GLES20.glGetUniformLocation(program, "offx")
         uBright = GLES20.glGetUniformLocation(program, "br")
+        uWave = GLES20.glGetUniformLocation(program, "wv")
+        uBreath = GLES20.glGetUniformLocation(program, "bth")
         uDim = GLES20.glGetUniformLocation(program, "dim")
         uRooms = GLES20.glGetUniformLocation(program, "rm")
 
@@ -202,6 +213,14 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         GLES20.glUniform1f(uOff, curY)
         GLES20.glUniform1f(uOffX, curX)
         GLES20.glUniform1f(uBright, brightness)
+        if (waveCount != seenWave) { seenWave = waveCount; waveStart = time }
+        val waveT = (time - waveStart) / 2.4f
+        GLES20.glUniform1f(uWave, if (waveT in 0f..1f) waveT else -1f)
+        val breath = if (!breathing) { breathStart = time; 0f } else {
+            val phase = (time - breathStart) % 60f
+            if (phase < 5f) sin(Math.PI.toFloat() * phase / 5f).let { it * it } else 0f
+        }
+        GLES20.glUniform1f(uBreath, breath)
         GLES20.glUniform1f(uDim, dim * houseAlpha)
         GLES20.glUniform1fv(uRooms, HouseRooms.COUNT, rooms, 0)
 
@@ -241,7 +260,7 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         val VERTEX_SHADER = """
             attribute vec3 p;
             attribute vec4 a;
-            uniform float t, ang, pit, asp, ps, sc, off, offx, dim, br;
+            uniform float t, ang, pit, asp, ps, sc, off, offx, dim, br, wv, bth;
             uniform float rm[12];
             varying float va;
             varying vec3 vc;
@@ -266,6 +285,10 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
                 if (a.x < .5) { va = a.w * tw * (.6 * br + lit * 1.1); vc = mix(am, vec3(1., .88, .6), lit * .8); }
                 else if (a.x < 1.5) { va = lit * (.85 + .15 * tw) * (1.3 + .3 * br); vc = vec3(1., .8, .42); }
                 else { va = .3 * tw * br; vc = vec3(1., .6, .25); }
+                // Fala od dołu do góry (nowe powiadomienie) i spokojne „oddychanie” (nieprzeczytane).
+                float band = wv < 0. ? 0. : exp(-pow((p.y - (wv * 11. - 1.)) / .9, 2.));
+                va *= 1. + bth * .7 + band * 2.2;
+                vc = mix(vc, vec3(1., .93, .75), band * .6);
                 va *= dim;
                 gl_Position = vec4(q.x * sc / asp + offx * (-q.z), q.y * sc + off * (-q.z), 0., -q.z);
                 gl_PointSize = (a.x > .5 && a.x < 1.5 ? 3.6 : 2.2 * (.85 + .15 * br)) * ps * (sc / 3.) * 28. / (-q.z);

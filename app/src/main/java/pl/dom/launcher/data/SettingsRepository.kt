@@ -38,6 +38,14 @@ data class LauncherSettings(
     val blankWhenAway: Boolean = true,
     /** Jasność domku 1–5. */
     val houseBrightness: Int = 3,
+    /** Aplikacje ukryte z listy „Wszystkie”. */
+    val hiddenApps: Set<String> = emptySet(),
+    /** „Oddychanie” domku przy nieprzeczytanych powiadomieniach. */
+    val houseBreathing: Boolean = true,
+    /** Wi-Fi dla gości (hasło w zaszyfrowanych kluczach). */
+    val guestSsid: String = "",
+    val guestSecurity: String = "WPA",
+    val guestHidden: Boolean = false,
 )
 
 class SettingsRepository(private val context: Context) {
@@ -53,6 +61,11 @@ class SettingsRepository(private val context: Context) {
         val blankHours = intPreferencesKey("blank_hours")
         val blankWhenAway = intPreferencesKey("blank_when_away")
         val houseBrightness = intPreferencesKey("house_brightness")
+        val hiddenApps = stringPreferencesKey("hidden_apps")
+        val houseBreathing = intPreferencesKey("house_breathing")
+        val guestSsid = stringPreferencesKey("guest_ssid")
+        val guestSecurity = stringPreferencesKey("guest_security")
+        val guestHidden = intPreferencesKey("guest_hidden")
     }
 
     val flow: Flow<LauncherSettings> = context.dataStore.data.map { it.toSettings() }
@@ -72,6 +85,16 @@ class SettingsRepository(private val context: Context) {
     suspend fun setEmbyUrl(url: String) = context.dataStore.edit { it[Keys.embyUrl] = url.trim().trimEnd('/') }
 
     suspend fun setHouseMode(mode: HouseMode) = context.dataStore.edit { it[Keys.houseMode] = mode.name }
+
+    suspend fun setHiddenApps(packages: Set<String>) = context.dataStore.edit { it[Keys.hiddenApps] = packages.joinToString("|") }
+
+    suspend fun setHouseBreathing(on: Boolean) = context.dataStore.edit { it[Keys.houseBreathing] = if (on) 1 else 0 }
+
+    suspend fun setGuestWifi(ssid: String, security: String, hidden: Boolean) = context.dataStore.edit {
+        it[Keys.guestSsid] = ssid
+        it[Keys.guestSecurity] = security
+        it[Keys.guestHidden] = if (hidden) 1 else 0
+    }
 
     suspend fun setHouseBrightness(level: Int) = context.dataStore.edit { it[Keys.houseBrightness] = level.coerceIn(1, 5) }
 
@@ -104,5 +127,10 @@ class SettingsRepository(private val context: Context) {
         blankHours = this[Keys.blankHours] ?: 3,
         blankWhenAway = (this[Keys.blankWhenAway] ?: 1) == 1,
         houseBrightness = this[Keys.houseBrightness] ?: 3,
+        hiddenApps = this[Keys.hiddenApps].orEmpty().split('|').filter { it.isNotBlank() }.toSet(),
+        houseBreathing = (this[Keys.houseBreathing] ?: 1) == 1,
+        guestSsid = this[Keys.guestSsid].orEmpty(),
+        guestSecurity = this[Keys.guestSecurity] ?: "WPA",
+        guestHidden = (this[Keys.guestHidden] ?: 0) == 1,
     )
 }
