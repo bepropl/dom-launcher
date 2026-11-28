@@ -114,7 +114,6 @@ private fun Problems(feeds: Feeds) {
 @Composable
 private fun EmbyCard(item: EmbyItem, actions: MediaActions, badge: String? = null) {
     WideMediaCard(
-        serviceApp = rememberServiceApp("Emby"),
         title = item.title,
         subtitle = listOf("Emby", item.subtitle).filter { it.isNotBlank() }.joinToString(" · "),
         imageUrl = item.imageUrl,
@@ -142,7 +141,7 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
                     title = show.name, subtitle = show.cardSubtitle(), imageUrl = show.cardImage(),
                     onClick = { actions.watchShow(show) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
-                    serviceApp = rememberServiceApp(show.provider),
+                    serviceLogo = rememberServiceLogo(show.provider),
                 )
             }
             items(feeds.embyResume, key = { "emby-${it.id}" }) { EmbyCard(it, actions, "Kontynuuj") }
@@ -343,9 +342,9 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions, searchRes
         if (library.shows.isNotEmpty()) {
             MediaRow("Obserwowane", "OK – szczegóły i odcinki") {
                 items(library.shows, key = { "f-${it.tmdbId}" }) { show ->
-                    val service = rememberServiceApp(show.provider)
+                    val service = rememberServiceLogo(show.provider)
                     PosterCard(
-                        serviceApp = service,
+                        serviceLogo = service,
                         title = show.name,
                         label = if (show.hasNewEpisode) "${show.unwatchedCount} nowe" else show.provider.takeIf { service == null },
                         imageUrl = TmdbImages.poster(show.posterPath),
@@ -368,7 +367,7 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions, searchRes
 private fun ToWatchPoster(entry: ToWatch, actions: MediaActions) {
     val kind = if (entry.type == MediaType.MOVIE) "Film" else "Serial"
     // W Waszym serwisie: ikona aplikacji w rogu zamiast nazwy serwisu.
-    val service = if (entry.ready) rememberServiceApp(entry.provider) else null
+    val service = if (entry.ready) rememberServiceLogo(entry.provider) else null
     val (label, strong) = when {
         entry.ready && entry.isNew -> (if (service != null) "Nowe" else "Nowe na ${entry.provider}") to true
         entry.ready -> (if (service != null) kind else listOfNotNull(kind, entry.provider).joinToString(" · ")) to false
@@ -380,7 +379,7 @@ private fun ToWatchPoster(entry: ToWatch, actions: MediaActions) {
         else -> (entry.release?.cardLabel() ?: "Jeszcze nie w Waszych serwisach") to false
     }
     PosterCard(
-        serviceApp = service,
+        serviceLogo = service,
         title = entry.title,
         label = label,
         labelStrong = strong,
@@ -392,13 +391,13 @@ private fun ToWatchPoster(entry: ToWatch, actions: MediaActions) {
 
 @Composable
 private fun TmdbPoster(item: MediaItem, actions: MediaActions, width: Dp = PosterWidth, height: Dp = PosterHeight) {
-    val service = rememberServiceApp(item.provider)
+    val service = rememberServiceLogo(item.provider)
     PosterCard(
         width = width,
         height = height,
         title = item.title,
         label = item.provider.takeIf { service == null },
-        serviceApp = service,
+        serviceLogo = service,
         imageUrl = TmdbImages.poster(item.posterPath),
         onClick = { actions.detail(item.type, item.tmdbId) },
         onLongClick = { actions.menuForItem(item) },

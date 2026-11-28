@@ -42,6 +42,29 @@ class MediaRepository(
     val library = LibraryStore(context)
     private val tmdb = Tmdb { secrets.get(SecretStore.TMDB_KEY) }
 
+    /** Logo serwisów z TMDB (nazwa → ścieżka); zapisane w pliku, żeby były od razu po starcie. */
+    private val logosFile = java.io.File(context.filesDir, "provider_logos.json")
+    private val _logos = MutableStateFlow(
+        runCatching { org.json.JSONObject(logosFile.readText()).let { o -> o.keys().asSequence().associateWith { o.getString(it) } } }
+            .getOrDefault(emptyMap()),
+    )
+    val providerLogos: StateFlow<Map<String, String>> = _logos.asStateFlow()
+
+    /** Adres logo serwisu po nazwie (dokładnie albo po uproszczonej nazwie, np. „Disney Plus”). */
+    fun logoFor(provider: String?): String? {
+        if (provider.isNullOrBlank()) return null
+        val logos = _logos.value
+        fun norm(t: String) = t.lowercase().replace("plus", "+").filter { it.isLetterOrDigit() || it == '+' }
+        val path = logos[provider] ?: logos.entries.firstOrNull { norm(it.key) == norm(provider) }?.value
+        return TmdbImages.logo(path)
+    }
+
+    private suspend fun refreshLogos() {
+        val fresh = runCatching { tmdb.providerLogos() }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return
+        _logos.value = fresh
+        runCatching { logosFile.writeText(org.json.JSONObject(fresh).toString()) }
+    }
+
     private val _feeds = MutableStateFlow(Feeds())
     val feeds: StateFlow<Feeds> = _feeds.asStateFlow()
 
@@ -114,6 +137,7 @@ class MediaRepository(
                 // Kadr następnego odcinka i czas nadrabiania – także przy starcie (wcześniej tylko co 6 h,
                 // więc po aktualizacji zostawał stary, źle policzony czas).
                 library.state.value.shows.filter { it.started && it.hasNewEpisode }.forEach { runCatching { updateNextInfo(it.tmdbId) } }
+                refreshLogos()
                 // Lista „Do obejrzenia”: przy starcie launchera i potem raz na 24 h.
                 runCatching { checkAvailability(s.providers) }
                 runCatching { updateLibraryPosters() }

@@ -76,6 +76,8 @@ object TmdbImages {
     fun backdropLarge(path: String?) = path?.let { "https://image.tmdb.org/t/p/w1280$it" }
     fun still(path: String?) = path?.let { "https://image.tmdb.org/t/p/w300$it" }
     fun stillLarge(path: String?) = path?.let { "https://image.tmdb.org/t/p/w780$it" }
+    /** Logo serwisu streamingowego (kwadrat z zaokrąglonymi rogami). */
+    fun logo(path: String?) = path?.let { "https://image.tmdb.org/t/p/w92$it" }
 }
 
 /** Wszystko do ekranu podglądu (jak w Netflixie). */

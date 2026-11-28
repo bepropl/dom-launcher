@@ -26,13 +26,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import pl.dom.launcher.LauncherApp
-import pl.dom.launcher.data.TvApp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -89,31 +89,27 @@ private fun MediaCardFrame(
     ) { content() }
 }
 
-/** Zainstalowana aplikacja serwisu (np. „Netflix”) – do znaczka w rogu karty. */
+/** Logo serwisu z TMDB (np. „Netflix”) – do znaczka w rogu karty. */
 @Composable
-fun rememberServiceApp(provider: String?): TvApp? {
+fun rememberServiceLogo(provider: String?): String? {
     if (provider.isNullOrBlank()) return null
     val app = LauncherApp.from(androidx.compose.ui.platform.LocalContext.current)
-    val apps by app.apps.apps.collectAsState()
-    return remember(provider, apps) { app.apps.findByName(provider) }
+    val logos by app.media.providerLogos.collectAsState()
+    return remember(provider, logos) { app.media.logoFor(provider) }
 }
 
-/** Znaczek z ikoną aplikacji w prawym dolnym rogu karty. */
+/** Znaczek z logo serwisu w prawym dolnym rogu karty. */
 @Composable
-private fun ServiceMark(app: TvApp, modifier: Modifier = Modifier) {
-    val icon = app.icon
-    val banner = app.banner
-    when {
-        icon != null -> androidx.compose.foundation.Image(
-            icon, contentDescription = app.label,
-            modifier = modifier.size(22.dp).clip(RoundedCornerShape(5.dp)).background(Color.Black.copy(alpha = 0.7f)).padding(2.dp),
-        )
-        banner != null -> androidx.compose.foundation.Image(
-            banner, contentDescription = app.label, contentScale = ContentScale.Crop,
-            modifier = modifier.size(36.dp, 20.dp).clip(RoundedCornerShape(4.dp)),
-        )
-        else -> Badge(app.label, strong = false, modifier = modifier)
-    }
+private fun ServiceLogo(url: String, modifier: Modifier = Modifier) {
+    AsyncImage(
+        model = url,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier
+            .shadow(3.dp, RoundedCornerShape(6.dp))
+            .size(24.dp)
+            .clip(RoundedCornerShape(6.dp)),
+    )
 }
 
 /** Karta 16:9 z obrazkiem na całą powierzchnię (nowe odcinki, Emby, „Dalej”). */
@@ -129,7 +125,7 @@ fun WideMediaCard(
     progress: Float? = null,
     width: Dp = WideCardWidth,
     height: Dp = WideCardHeight,
-    serviceApp: TvApp? = null,
+    serviceLogo: String? = null,
 ) {
     MediaCardFrame(Modifier.size(width, height), onClick, onLongClick) {
         Box(Modifier.fillMaxSize().background(placeholderColor(title))) {
@@ -142,10 +138,10 @@ fun WideMediaCard(
                 ),
             )
             if (badge != null) Badge(badge, badgeStrong, Modifier.align(Alignment.TopStart).padding(6.dp))
-            if (serviceApp != null) ServiceMark(serviceApp, Modifier.align(Alignment.BottomEnd).padding(6.dp))
+            if (serviceLogo != null) ServiceLogo(serviceLogo, Modifier.align(Alignment.BottomEnd).padding(6.dp))
             Column(
                 Modifier.align(Alignment.BottomStart).fillMaxWidth()
-                    .padding(start = 8.dp, end = if (serviceApp != null) 46.dp else 8.dp, top = 6.dp, bottom = 6.dp),
+                    .padding(start = 8.dp, end = if (serviceLogo != null) 38.dp else 8.dp, top = 6.dp, bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 Text(title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -172,7 +168,7 @@ fun PosterCard(
     width: Dp = PosterWidth,
     height: Dp = PosterHeight,
     labelStrong: Boolean = false,
-    serviceApp: TvApp? = null,
+    serviceLogo: String? = null,
 ) {
     MediaCardFrame(Modifier.size(width, height), onClick, onLongClick) {
         Box(Modifier.fillMaxSize().background(placeholderColor(title))) {
@@ -185,7 +181,7 @@ fun PosterCard(
                 )
             }
             if (label != null) Badge(label, strong = labelStrong, modifier = Modifier.align(Alignment.TopStart).padding(4.dp))
-            if (serviceApp != null) ServiceMark(serviceApp, Modifier.align(Alignment.BottomEnd).padding(4.dp))
+            if (serviceLogo != null) ServiceLogo(serviceLogo, Modifier.align(Alignment.BottomEnd).padding(4.dp))
         }
     }
 }

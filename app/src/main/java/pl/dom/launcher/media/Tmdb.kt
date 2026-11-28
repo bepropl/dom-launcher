@@ -219,6 +219,16 @@ class Tmdb(private val key: () -> String?) {
         return if (ours != null) Availability(ours.second, true) else Availability(available.firstOrNull()?.second, false)
     }
 
+    /** Logo serwisów: nazwa z TMDB → ścieżka obrazka (filmy i seriale, Polska). */
+    fun providerLogos(): Map<String, String> =
+        listOf("/watch/providers/movie", "/watch/providers/tv").flatMap { path ->
+            get(path, mapOf("watch_region" to REGION)).optJSONArray("results").mapObjects { o ->
+                val name = o.optString("provider_name")
+                val logo = o.optStringOrNull("logo_path")
+                if (name.isNotBlank() && logo != null) name to logo else null
+            }
+        }.toMap()
+
     /** Lista serwisów streamingowych dostępnych w Polsce (do wyboru na stronie w telefonie). */
     fun providers(): List<StreamingProvider> =
         get("/watch/providers/movie", mapOf("watch_region" to REGION))
