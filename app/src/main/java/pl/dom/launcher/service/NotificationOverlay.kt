@@ -87,6 +87,9 @@ class NotificationOverlay(private val service: AccessibilityService) {
         }
     }
 
+    /** Czy dymek jest teraz na ekranie. */
+    val isShowing: Boolean get() = view != null
+
     fun remove() {
         handler.removeCallbacks(hide)
         view?.let { runCatching { windowManager.removeView(it) } }

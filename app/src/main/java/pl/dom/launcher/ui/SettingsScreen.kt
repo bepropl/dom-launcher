@@ -172,8 +172,17 @@ fun SettingsScreen(settings: LauncherSettings?) {
                 }
             }
             val breathing = settings?.houseBreathing ?: true
-            Button(onClick = { scope.launch { app.settings.setHouseBreathing(!breathing) } }) {
-                Text((if (breathing) "✓ " else "") + "Domek „oddycha” przy nieprzeczytanych powiadomieniach", fontSize = 11.sp)
+            val every = settings?.breathEvery ?: 60
+            Text("„Oddychanie” domku przy nieprzeczytanych powiadomieniach (do otwarcia dzwonka, najdłużej 2 h)", fontSize = 10.sp, color = Palette.Soft)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { scope.launch { app.settings.setHouseBreathing(false) } }) {
+                    Text((if (!breathing) "✓ " else "") + "Wyłączone", fontSize = 11.sp)
+                }
+                listOf(10, 30, 60, 90).forEach { sec ->
+                    Button(onClick = { scope.launch { app.settings.setHouseBreathing(true); app.settings.setBreathEvery(sec) } }) {
+                        Text((if (breathing && every == sec) "✓ " else "") + "co $sec s", fontSize = 11.sp)
+                    }
+                }
             }
             val level = settings?.houseBrightness ?: 3
             Text("Jasność domku: $level z 5", fontSize = 10.sp, color = Palette.Soft)

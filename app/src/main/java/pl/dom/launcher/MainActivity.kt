@@ -54,6 +54,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Dymek z powiadomieniem: Wstecz albo OK go zamyka (i nic więcej nie robi).
+        if (pl.dom.launcher.ui.PopupState.visible.value && event.keyCode in DISMISS_KEYS) {
+            if (event.action == KeyEvent.ACTION_UP) pl.dom.launcher.ui.PopupState.visible.value = false
+            Interaction.touch()
+            return true
+        }
         if (Interaction.idle.value) {
             // Pierwsze wciśnięcie tylko budzi ekran z trybu spoczynku.
             if (event.action == KeyEvent.ACTION_UP) Interaction.touch()
@@ -64,6 +70,10 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        private val DISMISS_KEYS = setOf(
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
+        )
+
         const val EXTRA_GO_HOME = "pl.dom.launcher.GO_HOME"
     }
 }

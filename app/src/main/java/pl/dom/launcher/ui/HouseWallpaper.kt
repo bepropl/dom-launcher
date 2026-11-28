@@ -48,6 +48,7 @@ fun HouseWallpaper(
     /** Zmiana = jedna fala przez domek. */
     waveCount: Int = 0,
     breathing: Boolean = false,
+    breathEvery: Int = 60,
 ) {
     if (mode == HouseMode.OFF) {
         Box(modifier)
@@ -70,6 +71,7 @@ fun HouseWallpaper(
     renderer.showHouse = showHouse
     renderer.waveCount = waveCount
     renderer.breathing = breathing
+    renderer.breathEvery = breathEvery.toFloat()
     renderer.brightness = HouseBrightness.multiplier(brightnessLevel)
     renderer.offsetX = layout.first
     renderer.offsetY = layout.second

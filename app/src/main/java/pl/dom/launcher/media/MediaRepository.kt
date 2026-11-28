@@ -2,6 +2,9 @@ package pl.dom.launcher.media
 
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -317,12 +320,18 @@ class MediaRepository(
             library.update { lib -> lib.copy(shows = lib.shows.map { s -> if (s.tmdbId == tmdbId) s.copy(nextFor = null, catchUpMinutes = null) else s }) }
             return@withContext
         }
-        val seasons = (next.season..last.season).take(4)
-        val episodes = seasons.flatMap { n -> runCatching { tmdb.season(tmdbId, n) }.getOrDefault(emptyList()) }
+        // Wszystkie sezony do nadrobienia (wcześniej liczyły się tylko 4 pierwsze – stąd za mały czas).
+        val seasons = (next.season..last.season).take(60)
+        val episodes = seasons.chunked(6).flatMap { batch ->
+            coroutineScope {
+                batch.map { n -> async { runCatching { tmdb.season(tmdbId, n) }.getOrDefault(emptyList()) } }.awaitAll().flatten()
+            }
+        }
         val nextEp = episodes.firstOrNull { it.season == next.season && it.number == next.number }
-        val minutes = episodes
-            .filter { Episode(it.season, it.number) >= next && Episode(it.season, it.number) <= last }
-            .sumOf { it.runtime ?: 45 }
+        val pending = episodes.filter { Episode(it.season, it.number) >= next && Episode(it.season, it.number) <= last }
+        // Brak długości odcinka: średnia z pozostałych odcinków serialu, a jak nic nie wiadomo – 45 min.
+        val typical = pending.mapNotNull { it.runtime }.takeIf { it.isNotEmpty() }?.average()?.toInt() ?: 45
+        val minutes = pending.sumOf { it.runtime ?: typical }
         library.update { lib ->
             lib.copy(shows = lib.shows.map { s ->
                 if (s.tmdbId != tmdbId) s

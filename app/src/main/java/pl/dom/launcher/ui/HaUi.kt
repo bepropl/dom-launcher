@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,20 +53,27 @@ import java.util.Locale
  * Dymek z powiadomieniem z Home Assistanta, w prawym górnym rogu launchera.
  * Nie zabiera fokusu – pilot dalej steruje tym, co było na ekranie.
  */
+/** Czy dymek jest na ekranie – wtedy Wstecz/OK na pilocie go zamyka (MainActivity). */
+object PopupState {
+    val visible = kotlinx.coroutines.flow.MutableStateFlow(false)
+}
+
 @Composable
 fun NotificationPopup(notifications: SharedFlow<HaNotification>, modifier: Modifier = Modifier) {
     var current by remember { mutableStateOf<HaNotification?>(null) }
-    var visible by remember { mutableStateOf(false) }
+    var shownAt by remember { mutableStateOf(0L) }
+    val visible by PopupState.visible.collectAsState()
     LaunchedEffect(notifications) {
         notifications.collect { n ->
             current = n
-            visible = true
+            shownAt = System.nanoTime()
+            PopupState.visible.value = true
         }
     }
-    LaunchedEffect(current) {
+    LaunchedEffect(shownAt) {
         val n = current ?: return@LaunchedEffect
         delay(n.seconds * 1000L)
-        visible = false
+        PopupState.visible.value = false
     }
     AnimatedVisibility(
         visible = visible,

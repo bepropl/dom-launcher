@@ -80,6 +80,8 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
     @Volatile var waveCount = 0
     /** Czy domek ma „oddychać” (raz na minutę) – nieprzeczytane powiadomienia. */
     @Volatile var breathing = false
+    /** Odstęp między oddechami w sekundach. */
+    @Volatile var breathEvery = 60f
     private var seenWave = 0
     private var waveStart = -100f
     private var breathStart = 0f
@@ -217,8 +219,11 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
         val waveT = (time - waveStart) / 2.4f
         GLES20.glUniform1f(uWave, if (waveT in 0f..1f) waveT else -1f)
         val breath = if (!breathing) { breathStart = time; 0f } else {
-            val phase = (time - breathStart) % 60f
-            if (phase < 5f) sin(Math.PI.toFloat() * phase / 5f).let { it * it } else 0f
+            // Pierwszy oddech chwilę po fali, potem co breathEvery sekund; jeden oddech trwa 4 s.
+            val every = breathEvery.coerceAtLeast(6f)
+            val since = time - breathStart - 3.5f
+            val phase = if (since < 0f) -1f else since % every
+            if (phase in 0f..4f) sin(Math.PI.toFloat() * phase / 4f).let { it * it } else 0f
         }
         GLES20.glUniform1f(uBreath, breath)
         GLES20.glUniform1f(uDim, dim * houseAlpha)
@@ -287,8 +292,8 @@ class HouseRenderer(private val model: HouseModel) : GLSurfaceView.Renderer {
                 else { va = .3 * tw * br; vc = vec3(1., .6, .25); }
                 // Fala od dołu do góry (nowe powiadomienie) i spokojne „oddychanie” (nieprzeczytane).
                 float band = wv < 0. ? 0. : exp(-pow((p.y - (wv * 11. - 1.)) / .9, 2.));
-                va *= 1. + bth * .7 + band * 2.2;
-                vc = mix(vc, vec3(1., .93, .75), band * .6);
+                va *= 1. + bth * 1.6 + band * 2.2;
+                vc = mix(vc, vec3(1., .93, .75), max(band * .6, bth * .45));
                 va *= dim;
                 gl_Position = vec4(q.x * sc / asp + offx * (-q.z), q.y * sc + off * (-q.z), 0., -q.z);
                 gl_PointSize = (a.x > .5 && a.x < 1.5 ? 3.6 : 2.2 * (.85 + .15 * br)) * ps * (sc / 3.) * 28. / (-q.z);

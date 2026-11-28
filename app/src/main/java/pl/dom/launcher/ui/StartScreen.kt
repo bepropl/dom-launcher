@@ -113,15 +113,17 @@ fun StartScreen(
 
     Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
         val shows = library.showsWithNewEpisodes()
-        MediaRow("Nowe odcinki Waszych seriali", if (shows.isNotEmpty()) "${shows.size} do obejrzenia" else null) {
-            items(shows, key = { "show-${it.tmdbId}" }) { show ->
+        // Najwyżej 3 karty w linii (czwarta zasłaniałaby domek), druga linia od czwartej, łącznie max 6.
+        val cards: List<Pair<String, @Composable () -> Unit>> = shows.map { show ->
+            "show-${show.tmdbId}" to @Composable {
                 WideMediaCard(
                     title = show.name, subtitle = show.cardSubtitle(), imageUrl = show.cardImage(),
                     onClick = { actions.watchShow(show) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
                 )
             }
-            items(feeds.embyResume, key = { "emby-${it.id}" }) { item ->
+        } + feeds.embyResume.map { item ->
+            "emby-${item.id}" to @Composable {
                 WideMediaCard(
                     title = item.title,
                     subtitle = listOf("Emby", item.subtitle).filter { it.isNotBlank() }.joinToString(" · "),
@@ -130,6 +132,24 @@ fun StartScreen(
                     onLongClick = { actions.menuForEmby(item) },
                     badge = "Kontynuuj", badgeStrong = false, progress = item.progress,
                 )
+            }
+        }
+        if (cards.isNotEmpty()) {
+            val hint = when {
+                cards.size > 6 -> "${shows.size} do obejrzenia · pokazuję 6"
+                shows.isNotEmpty() -> "${shows.size} do obejrzenia"
+                else -> null
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.padding(start = EdgePadding + 4.dp)) { SectionTitle("Nowe odcinki Waszych seriali", hint) }
+                cards.take(6).chunked(3).forEach { line ->
+                    Row(
+                        Modifier.padding(horizontal = EdgePadding + 4.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        line.forEach { (key, card) -> androidx.compose.runtime.key(key) { card() } }
+                    }
+                }
             }
         }
         if (shows.isEmpty() && feeds.embyResume.isEmpty()) {

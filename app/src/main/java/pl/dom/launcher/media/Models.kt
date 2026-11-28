@@ -29,7 +29,11 @@ fun episodesLabel(n: Int): String = when {
 /** „ok. 2 h 40 min”, „ok. 45 min”. */
 fun durationLabel(minutes: Int): String {
     val m = ((minutes + 4) / 5) * 5
-    return if (m >= 60) "ok. ${m / 60} h" + (if (m % 60 > 0) " ${m % 60} min" else "") else "ok. $m min"
+    return when {
+        m >= 10 * 60 -> "ok. ${(minutes + 30) / 60} h"
+        m >= 60 -> "ok. ${m / 60} h" + (if (m % 60 > 0) " ${m % 60} min" else "")
+        else -> "ok. $m min"
+    }
 }
 
 /** Film albo serial z TMDB. */

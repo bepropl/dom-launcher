@@ -42,6 +42,8 @@ data class LauncherSettings(
     val hiddenApps: Set<String> = emptySet(),
     /** „Oddychanie” domku przy nieprzeczytanych powiadomieniach. */
     val houseBreathing: Boolean = true,
+    /** Co ile sekund domek „oddycha” (10, 30, 60, 90). */
+    val breathEvery: Int = 60,
     /** Wi-Fi dla gości (hasło w zaszyfrowanych kluczach). */
     val guestSsid: String = "",
     val guestSecurity: String = "WPA",
@@ -63,6 +65,7 @@ class SettingsRepository(private val context: Context) {
         val houseBrightness = intPreferencesKey("house_brightness")
         val hiddenApps = stringPreferencesKey("hidden_apps")
         val houseBreathing = intPreferencesKey("house_breathing")
+        val breathEvery = intPreferencesKey("breath_every")
         val guestSsid = stringPreferencesKey("guest_ssid")
         val guestSecurity = stringPreferencesKey("guest_security")
         val guestHidden = intPreferencesKey("guest_hidden")
@@ -89,6 +92,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setHiddenApps(packages: Set<String>) = context.dataStore.edit { it[Keys.hiddenApps] = packages.joinToString("|") }
 
     suspend fun setHouseBreathing(on: Boolean) = context.dataStore.edit { it[Keys.houseBreathing] = if (on) 1 else 0 }
+
+    suspend fun setBreathEvery(seconds: Int) = context.dataStore.edit { it[Keys.breathEvery] = seconds }
 
     suspend fun setGuestWifi(ssid: String, security: String, hidden: Boolean) = context.dataStore.edit {
         it[Keys.guestSsid] = ssid
@@ -129,6 +134,7 @@ class SettingsRepository(private val context: Context) {
         houseBrightness = this[Keys.houseBrightness] ?: 3,
         hiddenApps = this[Keys.hiddenApps].orEmpty().split('|').filter { it.isNotBlank() }.toSet(),
         houseBreathing = (this[Keys.houseBreathing] ?: 1) == 1,
+        breathEvery = this[Keys.breathEvery] ?: 60,
         guestSsid = this[Keys.guestSsid].orEmpty(),
         guestSecurity = this[Keys.guestSecurity] ?: "WPA",
         guestHidden = (this[Keys.guestHidden] ?: 0) == 1,

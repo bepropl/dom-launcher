@@ -48,6 +48,12 @@ class HomeOverrideService : AccessibilityService() {
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
+        // Dymek nad inną aplikacją: Wstecz albo OK go zamyka, a aplikacja tego klawisza nie dostaje.
+        val popup = overlay
+        if (popup != null && popup.isShowing && event.keyCode in DISMISS_KEYS) {
+            if (event.action == KeyEvent.ACTION_UP) popup.remove()
+            return true
+        }
         if (event.keyCode != KeyEvent.KEYCODE_HOME) return false
         if (event.action == KeyEvent.ACTION_UP) openLauncher()
         return true
@@ -71,6 +77,10 @@ class HomeOverrideService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     companion object {
+        private val DISMISS_KEYS = setOf(
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
+        )
+
         val STOCK_LAUNCHERS = setOf(
             "com.google.android.apps.tv.launcherx",
             "com.google.android.tvlauncher",

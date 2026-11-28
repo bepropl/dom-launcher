@@ -306,6 +306,7 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                 brightnessLevel = settings?.houseBrightness ?: 3,
                 waveCount = houseWave,
                 breathing = houseBreathing,
+                breathEvery = settings?.breathEvery ?: 60,
                 mode = settings?.houseMode ?: HouseMode.FULL,
                 showHouse = idle || (tab == TAB_START && !showSettings && !showAllApps),
                 layout = if (idle) Triple(drift.x, 0.14f + drift.y, 2.1f) else Triple(0.5f, 0.12f, 2.0f),
