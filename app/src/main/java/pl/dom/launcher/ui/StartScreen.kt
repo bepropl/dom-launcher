@@ -120,6 +120,7 @@ fun StartScreen(
                     title = show.name, subtitle = show.cardSubtitle(), imageUrl = show.cardImage(),
                     onClick = { actions.watchShow(show) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
+                    serviceApp = rememberServiceApp(show.provider),
                 )
             }
         } + feeds.embyResume.map { item ->
@@ -131,6 +132,7 @@ fun StartScreen(
                     onClick = { actions.openEmby() },
                     onLongClick = { actions.menuForEmby(item) },
                     badge = "Kontynuuj", badgeStrong = false, progress = item.progress,
+                    serviceApp = rememberServiceApp("Emby"),
                 )
             }
         }

@@ -399,16 +399,22 @@ class MediaRepository(
             val wasReady = entry.mine && released(entry.releaseDate, checkedAt)
             val isReady = av.mine && released(entry.releaseDate, now)
             val becameReady = isReady && !wasReady
+            // Jeszcze nie do obejrzenia u Was: film – premiera w kinach / na VOD, serial – kanał premiery.
+            val release = if (!isReady && entry.type == MediaType.MOVIE) runCatching { tmdb.movieRelease(entry.tmdbId) }.getOrNull() else null
+            val network = if (!isReady && entry.type == MediaType.TV) runCatching { tmdb.tvNetwork(entry.tmdbId) }.getOrNull() else null
             library.update { lib ->
                 if (entry.followed) {
                     lib.copy(shows = lib.shows.map { s ->
                         if (s.tmdbId != entry.tmdbId) s
-                        else s.copy(provider = av.provider, mine = av.mine, checkedAt = now, newSince = if (becameReady) now else s.newSince)
+                        else s.copy(provider = av.provider, mine = av.mine, checkedAt = now, newSince = if (becameReady) now else s.newSince, network = network ?: s.network)
                     })
                 } else {
                     lib.copy(watchlist = lib.watchlist.map { w ->
                         if (w.tmdbId != entry.tmdbId || w.type != entry.type) w
-                        else w.copy(provider = av.provider, mine = av.mine, checkedAt = now, newSince = if (becameReady) now else w.newSince)
+                        else w.copy(
+                            provider = av.provider, mine = av.mine, checkedAt = now, newSince = if (becameReady) now else w.newSince,
+                            release = release ?: w.release, network = network ?: w.network,
+                        )
                     })
                 }
             }

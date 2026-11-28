@@ -85,7 +85,11 @@ class MediaActions(
 
     /** OK na plakacie – podgląd tytułu na cały ekran. */
     fun detail(type: MediaType, tmdbId: Int) {
-        if (!justOpenedMenu()) openDetail(DetailRequest(type, tmdbId))
+        if (!justOpenedMenu()) {
+            // Otwarte przytrzymaniem OK – reszta tego naciśnięcia nie trafi w „Oglądaj w …”.
+            pl.dom.launcher.service.OkGuard.consumeRest()
+            openDetail(DetailRequest(type, tmdbId))
+        }
     }
 
     /** OK na karcie „Dalej”: otwiera serwis i zapamiętuje odcinek do pytania „Obejrzeliście…?”. */
@@ -357,6 +361,32 @@ fun ActionMenu(request: MenuRequest, onDismiss: () -> Unit) {
 }
 
 /** „dziś”, „wczoraj”, „za 3 dni”, „26 listopada” – dla dat RRRR-MM-DD z TMDB. */
+private val LongDate = java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy", java.util.Locale.forLanguageTag("pl-PL"))
+
+private fun longDate(iso: String): String =
+    runCatching { LocalDate.parse(iso).format(LongDate) }.getOrDefault(iso)
+
+/** Linijka w podglądzie filmu: „W kinach: 12 grudnia 2026 · Na VOD: 20 lutego 2027 (data z USA)”. */
+fun pl.dom.launcher.media.ReleaseInfo.detailLine(): String? {
+    val parts = listOfNotNull(
+        cinema?.let { "W kinach: ${longDate(it)}" + if (cinemaCountry == "US") " (data z USA)" else "" },
+        digital?.let { "Na VOD: ${longDate(it)}" + if (digitalCountry == "US") " (data z USA)" else "" },
+    )
+    return parts.takeIf { it.isNotEmpty() }?.joinToString("  ·  ")
+}
+
+/** Krótko na plakat: co nastąpi najbliżej – „W kinach 12 grudnia”, „Na VOD za 3 dni”, „Teraz w kinach”. */
+fun pl.dom.launcher.media.ReleaseInfo.cardLabel(): String? {
+    val today = LocalDate.now().toString()
+    val usa = { c: String? -> if (c == "US") " (USA)" else "" }
+    return when {
+        cinema != null && cinema > today -> "W kinach ${friendlyDate(cinema)}${usa(cinemaCountry)}"
+        digital != null && digital > today -> "Na VOD ${friendlyDate(digital)}${usa(digitalCountry)}"
+        digital == null && cinema != null -> "Teraz w kinach"
+        else -> null
+    }
+}
+
 fun friendlyDate(iso: String?): String? {
     val date = iso?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return null
     val days = ChronoUnit.DAYS.between(LocalDate.now(), date)

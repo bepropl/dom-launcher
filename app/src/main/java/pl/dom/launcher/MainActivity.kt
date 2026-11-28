@@ -54,6 +54,17 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode in OK_KEYS) {
+            if (event.action == KeyEvent.ACTION_DOWN) pl.dom.launcher.service.OkGuard.held = true
+            if (pl.dom.launcher.service.OkGuard.swallow) {
+                if (event.action == KeyEvent.ACTION_UP) {
+                    pl.dom.launcher.service.OkGuard.swallow = false
+                    pl.dom.launcher.service.OkGuard.held = false
+                }
+                return true
+            }
+            if (event.action == KeyEvent.ACTION_UP) pl.dom.launcher.service.OkGuard.held = false
+        }
         // Dymek z powiadomieniem: Wstecz albo OK go zamyka (i nic więcej nie robi).
         if (pl.dom.launcher.ui.PopupState.visible.value && event.keyCode in DISMISS_KEYS) {
             if (event.action == KeyEvent.ACTION_UP) pl.dom.launcher.ui.PopupState.visible.value = false
@@ -70,6 +81,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        private val OK_KEYS = setOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER)
         private val DISMISS_KEYS = setOf(
             KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
         )

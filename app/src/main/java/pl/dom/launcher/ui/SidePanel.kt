@@ -179,9 +179,9 @@ fun settingsPanelItems(
     guestSsid: String? = null,
     onGuest: () -> Unit = {},
 ) = listOfNotNull(
-    PanelItem("Ustawienia launchera", "Dom: kod QR, domek, wygaszacz", Icons.Filled.Home, onLauncher),
-    PanelItem("Ustawienia Androida", "Sieć, obraz, dźwięk, aplikacje, system", Icons.Filled.Settings, onAndroid),
-    guestSsid?.let { PanelItem("Wi-Fi dla gości", "Kod QR do sieci „$it”", Icons.Filled.Lock, onGuest) },
+    PanelItem("Ustawienia launchera", null, Icons.Filled.Home, onLauncher),
+    PanelItem("Ustawienia Androida", null, Icons.Filled.Settings, onAndroid),
+    guestSsid?.let { PanelItem("Wi-Fi dla gości", "Kod QR do zeskanowania telefonem", Icons.Filled.Lock, onGuest) },
     PanelItem(
         if (update is UpdateState.Available) "Zainstaluj aktualizację" else "Aktualizacja Dom",
         when (update) {
@@ -213,7 +213,6 @@ fun ColumnScope.GuestWifiContent(ssid: String, qrText: String, first: FocusReque
     Box(Modifier.fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
         Image(qr, contentDescription = "Kod QR sieci $ssid", modifier = Modifier.size(220.dp).clip(RoundedCornerShape(8.dp)))
     }
-    Text(ssid, fontSize = 16.sp, color = Palette.Text, modifier = Modifier.align(Alignment.CenterHorizontally))
     Text(
         "Zeskanujcie aparatem w telefonie – połączy się samo.",
         fontSize = 10.sp, color = Palette.Soft, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp, bottom = 10.dp),

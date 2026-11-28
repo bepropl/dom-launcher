@@ -41,6 +41,8 @@ data class FollowedShow(
     val nextStill: String? = null,
     /** Ile minut zajmie nadrobienie wszystkich wydanych, nieobejrzanych odcinków. */
     val catchUpMinutes: Int? = null,
+    /** Kanał/serwis premiery (do „Premiera … · Netflix” w „Czekacie”). */
+    val network: String? = null,
 ) {
     /** Dane o następnym odcinku, jeśli dotyczą właśnie tego odcinka. */
     val nextInfoValid: Boolean get() = nextFor != null && nextFor == nextToWatch
@@ -95,6 +97,10 @@ data class WatchItem(
     val mine: Boolean = provider != null,
     val newSince: Long = 0,
     val checkedAt: Long = 0,
+    /** Film: premiera w kinach / na VOD (sprawdzane razem z dostępnością). */
+    val release: ReleaseInfo? = null,
+    /** Serial: kanał/serwis premiery. */
+    val network: String? = null,
 )
 
 /**
@@ -113,6 +119,8 @@ data class ToWatch(
     val newSince: Long,
     val followed: Boolean,
     val addedAt: Long,
+    val release: ReleaseInfo? = null,
+    val network: String? = null,
 ) {
     /** Wyszedł (albo nie znamy daty). */
     val released: Boolean get() = releaseDate == null || releaseDate <= java.time.LocalDate.now().toString()
@@ -142,11 +150,11 @@ data class Library(
     /** Cała lista „Do obejrzenia” (lista + niezaczęte obserwowane seriale), bez powtórzeń. */
     fun toWatch(): List<ToWatch> {
         val fromShows = shows.filterNot { it.started }.map { s ->
-            ToWatch(s.tmdbId, MediaType.TV, s.name, s.posterPath, s.backdropPath, s.provider, s.mine, s.firstAirDate, s.newSince, true, s.updatedAt)
+            ToWatch(s.tmdbId, MediaType.TV, s.name, s.posterPath, s.backdropPath, s.provider, s.mine, s.firstAirDate, s.newSince, true, s.updatedAt, network = s.network)
         }
         val showIds = fromShows.map { it.tmdbId }.toSet()
         val fromList = watchlist.filterNot { it.type == MediaType.TV && it.tmdbId in showIds }.map { w ->
-            ToWatch(w.tmdbId, w.type, w.title, w.posterPath, w.backdropPath, w.provider, w.mine, w.releaseDate, w.newSince, false, w.addedAt)
+            ToWatch(w.tmdbId, w.type, w.title, w.posterPath, w.backdropPath, w.provider, w.mine, w.releaseDate, w.newSince, false, w.addedAt, w.release, w.network)
         }
         return fromList + fromShows
     }
@@ -194,6 +202,7 @@ class LibraryStore(context: Context) {
                 .put("nextName", s.nextName ?: JSONObject.NULL)
                 .put("nextStill", s.nextStill ?: JSONObject.NULL)
                 .put("catchUpMinutes", s.catchUpMinutes ?: JSONObject.NULL)
+                .put("network", s.network ?: JSONObject.NULL)
         }))
         .put("watchlist", JSONArray(lib.watchlist.map { w ->
             JSONObject()
@@ -202,6 +211,11 @@ class LibraryStore(context: Context) {
                 .put("provider", w.provider ?: JSONObject.NULL).put("addedAt", w.addedAt)
                 .put("releaseDate", w.releaseDate ?: JSONObject.NULL)
                 .put("mine", w.mine).put("newSince", w.newSince).put("checkedAt", w.checkedAt)
+                .put("network", w.network ?: JSONObject.NULL)
+                .put("release", w.release?.let { r ->
+                    JSONObject().put("cinema", r.cinema ?: JSONObject.NULL).put("cinemaCountry", r.cinemaCountry ?: JSONObject.NULL)
+                        .put("digital", r.digital ?: JSONObject.NULL).put("digitalCountry", r.digitalCountry ?: JSONObject.NULL)
+                } ?: JSONObject.NULL)
         }))
         .put("history", JSONArray(lib.history.map { h ->
             JSONObject().put("tmdbId", h.tmdbId).put("type", h.type.name).put("title", h.title)
@@ -236,6 +250,7 @@ class LibraryStore(context: Context) {
                 nextName = s.optStringOrNull("nextName"),
                 nextStill = s.optStringOrNull("nextStill"),
                 catchUpMinutes = if (s.has("catchUpMinutes") && !s.isNull("catchUpMinutes")) s.optInt("catchUpMinutes") else null,
+                network = s.optStringOrNull("network"),
             )
         },
         watchlist = o.optJSONArray("watchlist").mapObjects { w ->
@@ -251,6 +266,10 @@ class LibraryStore(context: Context) {
                 mine = if (w.has("mine")) w.optBoolean("mine") else w.optStringOrNull("provider") != null,
                 newSince = w.optLong("newSince"),
                 checkedAt = w.optLong("checkedAt"),
+                network = w.optStringOrNull("network"),
+                release = w.optJSONObject("release")?.let { r ->
+                    ReleaseInfo(r.optStringOrNull("cinema"), r.optStringOrNull("cinemaCountry"), r.optStringOrNull("digital"), r.optStringOrNull("digitalCountry"))
+                },
             )
         },
         history = o.optJSONArray("history").mapObjects { h ->

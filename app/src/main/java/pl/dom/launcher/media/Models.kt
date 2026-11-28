@@ -102,6 +102,21 @@ data class MediaDetails(
     val offersBuy: List<String> = emptyList(),
     /** „Dostępne też: …” – wyliczone dla Waszych serwisów. */
     val alsoAvailable: String? = null,
+    /** Film: premiera w kinach i cyfrowa (VOD). */
+    val release: ReleaseInfo? = null,
+    /** Serial: kanał/serwis, w którym ma premierę (np. Netflix, HBO). */
+    val networks: List<String> = emptyList(),
+)
+
+/**
+ * Premiera filmu z TMDB (release_dates): w kinach i cyfrowa (streaming/VOD), RRRR-MM-DD.
+ * Najpierw daty dla Polski; brak – data z USA (kraj zapisany, żeby dopisać „USA”).
+ */
+data class ReleaseInfo(
+    val cinema: String? = null,
+    val cinemaCountry: String? = null,
+    val digital: String? = null,
+    val digitalCountry: String? = null,
 )
 
 /** „Bo oglądaliście X” – propozycje na podstawie tytułu, który już znacie. */

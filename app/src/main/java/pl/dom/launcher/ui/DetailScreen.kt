@@ -173,6 +173,8 @@ private fun DetailContent(
                 val end = now.plusMinutes(d.runtime.toLong())
                 Text("Skończy się o ${end.format(TimeFormat)}", fontSize = 10.sp, color = Palette.Amber)
             }
+            d.release?.detailLine()?.let { Text(it, fontSize = 9.sp, color = Palette.Soft) }
+            d.networks.takeIf { it.isNotEmpty() }?.let { Text("Kanał / serwis premiery: ${it.take(2).joinToString(", ")}", fontSize = 9.sp, color = Palette.Soft) }
             d.alsoAvailable?.let { Text("Dostępne też: $it", fontSize = 9.sp, color = Palette.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             followed?.let { show ->
                 val next = show.nextToWatch

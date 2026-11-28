@@ -23,6 +23,10 @@ import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import pl.dom.launcher.LauncherApp
+import pl.dom.launcher.data.TvApp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -85,6 +89,33 @@ private fun MediaCardFrame(
     ) { content() }
 }
 
+/** Zainstalowana aplikacja serwisu (np. „Netflix”) – do znaczka w rogu karty. */
+@Composable
+fun rememberServiceApp(provider: String?): TvApp? {
+    if (provider.isNullOrBlank()) return null
+    val app = LauncherApp.from(androidx.compose.ui.platform.LocalContext.current)
+    val apps by app.apps.apps.collectAsState()
+    return remember(provider, apps) { app.apps.findByName(provider) }
+}
+
+/** Znaczek z ikoną aplikacji w prawym dolnym rogu karty. */
+@Composable
+private fun ServiceMark(app: TvApp, modifier: Modifier = Modifier) {
+    val icon = app.icon
+    val banner = app.banner
+    when {
+        icon != null -> androidx.compose.foundation.Image(
+            icon, contentDescription = app.label,
+            modifier = modifier.size(22.dp).clip(RoundedCornerShape(5.dp)).background(Color.Black.copy(alpha = 0.7f)).padding(2.dp),
+        )
+        banner != null -> androidx.compose.foundation.Image(
+            banner, contentDescription = app.label, contentScale = ContentScale.Crop,
+            modifier = modifier.size(36.dp, 20.dp).clip(RoundedCornerShape(4.dp)),
+        )
+        else -> Badge(app.label, strong = false, modifier = modifier)
+    }
+}
+
 /** Karta 16:9 z obrazkiem na całą powierzchnię (nowe odcinki, Emby, „Dalej”). */
 @Composable
 fun WideMediaCard(
@@ -98,6 +129,7 @@ fun WideMediaCard(
     progress: Float? = null,
     width: Dp = WideCardWidth,
     height: Dp = WideCardHeight,
+    serviceApp: TvApp? = null,
 ) {
     MediaCardFrame(Modifier.size(width, height), onClick, onLongClick) {
         Box(Modifier.fillMaxSize().background(placeholderColor(title))) {
@@ -110,8 +142,10 @@ fun WideMediaCard(
                 ),
             )
             if (badge != null) Badge(badge, badgeStrong, Modifier.align(Alignment.TopStart).padding(6.dp))
+            if (serviceApp != null) ServiceMark(serviceApp, Modifier.align(Alignment.BottomEnd).padding(6.dp))
             Column(
-                Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                    .padding(start = 8.dp, end = if (serviceApp != null) 46.dp else 8.dp, top = 6.dp, bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(1.dp),
             ) {
                 Text(title, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -138,6 +172,7 @@ fun PosterCard(
     width: Dp = PosterWidth,
     height: Dp = PosterHeight,
     labelStrong: Boolean = false,
+    serviceApp: TvApp? = null,
 ) {
     MediaCardFrame(Modifier.size(width, height), onClick, onLongClick) {
         Box(Modifier.fillMaxSize().background(placeholderColor(title))) {
@@ -150,6 +185,7 @@ fun PosterCard(
                 )
             }
             if (label != null) Badge(label, strong = labelStrong, modifier = Modifier.align(Alignment.TopStart).padding(4.dp))
+            if (serviceApp != null) ServiceMark(serviceApp, Modifier.align(Alignment.BottomEnd).padding(4.dp))
         }
     }
 }

@@ -54,7 +54,10 @@ class Tmdb(private val key: () -> String?) {
     fun details(type: MediaType, id: Int): MediaDetails {
         val o = get(
             if (type == MediaType.MOVIE) "/movie/$id" else "/tv/$id",
-            mapOf("append_to_response" to "videos,recommendations,credits,watch/providers", "include_video_language" to "pl,en,null"),
+            mapOf(
+                "append_to_response" to if (type == MediaType.MOVIE) "videos,recommendations,credits,watch/providers,release_dates" else "videos,recommendations,credits,watch/providers",
+                "include_video_language" to "pl,en,null",
+            ),
         )
         val videos = o.optJSONObject("videos")?.optJSONArray("results").mapObjects { v ->
             if (v.optString("site") == "YouTube") v else null
@@ -105,6 +108,36 @@ class Tmdb(private val key: () -> String?) {
             offersFlatrate = offers(o, "flatrate").map { it.first to it.second } + offers(o, "free") + offers(o, "ads"),
             offersRent = offers(o, "rent").map { it.second },
             offersBuy = offers(o, "buy").map { it.second },
+            release = if (type == MediaType.MOVIE) parseRelease(o.optJSONObject("release_dates")) else null,
+            networks = if (type == MediaType.TV) o.optJSONArray("networks").mapObjects { it.optString("name").takeIf { n -> n.isNotBlank() } } else emptyList(),
+        )
+    }
+
+    /** Premiera filmu w kinach i na VOD (samo zapytanie o daty, do listy „Do obejrzenia”). */
+    fun movieRelease(id: Int): ReleaseInfo? = parseRelease(get("/movie/$id/release_dates"))
+
+    /** Kanał/serwis premiery serialu. */
+    fun tvNetwork(id: Int): String? =
+        get("/tv/$id").optJSONArray("networks").mapObjects { it.optString("name").takeIf { n -> n.isNotBlank() } }.firstOrNull()
+
+    /** Typy TMDB: 2 – kina (ograniczone), 3 – kina, 4 – cyfrowa (VOD/streaming). */
+    private fun parseRelease(o: JSONObject?): ReleaseInfo? {
+        val byCountry = o?.optJSONArray("results").mapObjects { r ->
+            val dates = r.optJSONArray("release_dates").mapObjects { d ->
+                val date = d.optString("release_date").take(10).takeIf { it.length == 10 } ?: return@mapObjects null
+                d.optInt("type") to date
+            }
+            r.optString("iso_3166_1") to dates
+        }.toMap()
+        fun first(country: String, types: Set<Int>) = byCountry[country]?.filter { it.first in types }?.minOfOrNull { it.second }
+        val cinemaPl = first(REGION, setOf(2, 3))
+        val digitalPl = first(REGION, setOf(4))
+        val cinema = cinemaPl ?: first("US", setOf(2, 3))
+        val digital = digitalPl ?: first("US", setOf(4))
+        if (cinema == null && digital == null) return null
+        return ReleaseInfo(
+            cinema = cinema, cinemaCountry = if (cinemaPl == null && cinema != null) "US" else REGION,
+            digital = digital, digitalCountry = if (digitalPl == null && digital != null) "US" else REGION,
         )
     }
 

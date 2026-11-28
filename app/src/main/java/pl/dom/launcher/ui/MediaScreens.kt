@@ -114,6 +114,7 @@ private fun Problems(feeds: Feeds) {
 @Composable
 private fun EmbyCard(item: EmbyItem, actions: MediaActions, badge: String? = null) {
     WideMediaCard(
+        serviceApp = rememberServiceApp("Emby"),
         title = item.title,
         subtitle = listOf("Emby", item.subtitle).filter { it.isNotBlank() }.joinToString(" · "),
         imageUrl = item.imageUrl,
@@ -141,6 +142,7 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
                     title = show.name, subtitle = show.cardSubtitle(), imageUrl = show.cardImage(),
                     onClick = { actions.watchShow(show) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
+                    serviceApp = rememberServiceApp(show.provider),
                 )
             }
             items(feeds.embyResume, key = { "emby-${it.id}" }) { EmbyCard(it, actions, "Kontynuuj") }
@@ -341,9 +343,11 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions, searchRes
         if (library.shows.isNotEmpty()) {
             MediaRow("Obserwowane", "OK – szczegóły i odcinki") {
                 items(library.shows, key = { "f-${it.tmdbId}" }) { show ->
+                    val service = rememberServiceApp(show.provider)
                     PosterCard(
+                        serviceApp = service,
                         title = show.name,
-                        label = if (show.hasNewEpisode) "${show.unwatchedCount} nowe" else show.provider,
+                        label = if (show.hasNewEpisode) "${show.unwatchedCount} nowe" else show.provider.takeIf { service == null },
                         imageUrl = TmdbImages.poster(show.posterPath),
                         onClick = { actions.detail(MediaType.TV, show.tmdbId) },
                         onLongClick = { actions.menuForShow(show) },
@@ -363,14 +367,20 @@ fun ShowsScreen(library: Library, feeds: Feeds, actions: MediaActions, searchRes
 @Composable
 private fun ToWatchPoster(entry: ToWatch, actions: MediaActions) {
     val kind = if (entry.type == MediaType.MOVIE) "Film" else "Serial"
+    // W Waszym serwisie: ikona aplikacji w rogu zamiast nazwy serwisu.
+    val service = if (entry.ready) rememberServiceApp(entry.provider) else null
     val (label, strong) = when {
-        entry.ready && entry.isNew -> "Nowe na ${entry.provider}" to true
-        entry.ready -> listOfNotNull(kind, entry.provider).joinToString(" · ") to false
-        !entry.released -> "Premiera ${friendlyDate(entry.releaseDate) ?: ""}".trim() to false
+        entry.ready && entry.isNew -> (if (service != null) "Nowe" else "Nowe na ${entry.provider}") to true
+        entry.ready -> (if (service != null) kind else listOfNotNull(kind, entry.provider).joinToString(" · ")) to false
+        !entry.released -> (
+            entry.release?.cardLabel()
+                ?: listOfNotNull("Premiera ${friendlyDate(entry.releaseDate) ?: ""}".trim(), entry.network).joinToString(" · ")
+            ) to false
         entry.provider != null -> "Nie w Waszych serwisach · jest na ${entry.provider}" to false
-        else -> "Jeszcze nie w Waszych serwisach" to false
+        else -> (entry.release?.cardLabel() ?: "Jeszcze nie w Waszych serwisach") to false
     }
     PosterCard(
+        serviceApp = service,
         title = entry.title,
         label = label,
         labelStrong = strong,
@@ -382,11 +392,13 @@ private fun ToWatchPoster(entry: ToWatch, actions: MediaActions) {
 
 @Composable
 private fun TmdbPoster(item: MediaItem, actions: MediaActions, width: Dp = PosterWidth, height: Dp = PosterHeight) {
+    val service = rememberServiceApp(item.provider)
     PosterCard(
         width = width,
         height = height,
         title = item.title,
-        label = item.provider,
+        label = item.provider.takeIf { service == null },
+        serviceApp = service,
         imageUrl = TmdbImages.poster(item.posterPath),
         onClick = { actions.detail(item.type, item.tmdbId) },
         onLongClick = { actions.menuForItem(item) },
