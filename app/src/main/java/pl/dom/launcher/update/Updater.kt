@@ -59,7 +59,10 @@ class Updater(private val context: Context) {
                 val info = latestRelease()
                 if (info != null && info.versionCode > BuildConfig.VERSION_CODE) UpdateState.Available(info)
                 else UpdateState.UpToDate
-            }.getOrElse { UpdateState.Failed("Nie udało się sprawdzić aktualizacji: ${it.message}") }
+            }.getOrElse {
+                pl.dom.launcher.util.ErrorLog.add("Aktualizacja", "Sprawdzanie: ${it.message}")
+                UpdateState.Failed("Nie udało się sprawdzić aktualizacji: ${it.message}")
+            }
         }
     }
 
@@ -86,7 +89,10 @@ class Updater(private val context: Context) {
                 install(apk)
             }
         }
-        result.onFailure { _state.value = UpdateState.Failed("Aktualizacja nie powiodła się: ${it.message}") }
+        result.onFailure {
+            pl.dom.launcher.util.ErrorLog.add("Aktualizacja", "Pobieranie/instalacja: ${it.message}")
+            _state.value = UpdateState.Failed("Aktualizacja nie powiodła się: ${it.message}")
+        }
     }
 
     internal fun onInstallResult(success: Boolean, message: String?) {

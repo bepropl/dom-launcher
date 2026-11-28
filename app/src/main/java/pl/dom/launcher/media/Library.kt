@@ -33,7 +33,18 @@ data class FollowedShow(
     /** Kiedy pojawił się w Waszym serwisie (znaczek „Nowe na …” przez kilka dni). */
     val newSince: Long = 0,
     val checkedAt: Long = 0,
+    /** Kiedy ostatnio coś oznaczyliście jako obejrzane (znaczek „Nowy” przy odcinkach wydanych później). */
+    val watchedAt: Long = 0,
+    /** Informacje o następnym odcinku do obejrzenia (kadr i tytuł na karcie „Dalej”). */
+    val nextFor: Episode? = null,
+    val nextName: String? = null,
+    val nextStill: String? = null,
+    /** Ile minut zajmie nadrobienie wszystkich wydanych, nieobejrzanych odcinków. */
+    val catchUpMinutes: Int? = null,
 ) {
+    /** Dane o następnym odcinku, jeśli dotyczą właśnie tego odcinka. */
+    val nextInfoValid: Boolean get() = nextFor != null && nextFor == nextToWatch
+
     /** Czy zaczęliście oglądać (niezaczęte są na liście „Do obejrzenia”, a nie w „Dalej”). */
     val started: Boolean get() = watched.season > 0 || watched.number > 0
 
@@ -165,6 +176,11 @@ class LibraryStore(context: Context) {
                 .put("ended", s.ended).put("updatedAt", s.updatedAt)
                 .put("firstAirDate", s.firstAirDate ?: JSONObject.NULL)
                 .put("mine", s.mine).put("newSince", s.newSince).put("checkedAt", s.checkedAt)
+                .put("watchedAt", s.watchedAt)
+                .put("nextFor", s.nextFor?.let(::episodeJson) ?: JSONObject.NULL)
+                .put("nextName", s.nextName ?: JSONObject.NULL)
+                .put("nextStill", s.nextStill ?: JSONObject.NULL)
+                .put("catchUpMinutes", s.catchUpMinutes ?: JSONObject.NULL)
         }))
         .put("watchlist", JSONArray(lib.watchlist.map { w ->
             JSONObject()
@@ -195,6 +211,11 @@ class LibraryStore(context: Context) {
                 mine = if (s.has("mine")) s.optBoolean("mine") else s.optStringOrNull("provider") != null,
                 newSince = s.optLong("newSince"),
                 checkedAt = s.optLong("checkedAt"),
+                watchedAt = s.optLong("watchedAt"),
+                nextFor = s.optJSONObject("nextFor")?.let(::episodeFrom),
+                nextName = s.optStringOrNull("nextName"),
+                nextStill = s.optStringOrNull("nextStill"),
+                catchUpMinutes = if (s.has("catchUpMinutes") && !s.isNull("catchUpMinutes")) s.optInt("catchUpMinutes") else null,
             )
         },
         watchlist = o.optJSONArray("watchlist").mapObjects { w ->

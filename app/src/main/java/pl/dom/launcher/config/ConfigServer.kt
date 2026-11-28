@@ -40,6 +40,7 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
                 else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Nie ma takiej strony")
             }
         } catch (e: Exception) {
+            pl.dom.launcher.util.ErrorLog.add("Strona w telefonie", e)
             json(Response.Status.INTERNAL_ERROR, JSONObject().put("error", "Błąd: ${e.message ?: e.javaClass.simpleName}"))
         }
     }
@@ -85,6 +86,15 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
                 ok()
             }
             get && session.uri == "/api/status" -> json(Response.Status.OK, status())
+            get && session.uri == "/api/errors" -> json(Response.Status.OK, JSONObject().put("version", pl.dom.launcher.BuildConfig.VERSION_NAME).put("entries", JSONArray(
+                pl.dom.launcher.util.ErrorLog.all().map { e ->
+                    JSONObject().put("at", pl.dom.launcher.util.ErrorLog.format(e.at)).put("source", e.source).put("message", e.message)
+                },
+            )))
+            post && session.uri == "/api/errors/clear" -> {
+                pl.dom.launcher.util.ErrorLog.clear()
+                ok()
+            }
             post && session.uri == "/api/ha/trust" -> {
                 val fingerprint = body(session).optString("fingerprint").takeIf { it.isNotBlank() }
                 runBlocking { app.settings.updateHaConfig { it.copy(certSha256 = fingerprint) } }
@@ -199,7 +209,7 @@ class ConfigServer(context: Context, private val pin: String) : NanoHTTPD(PORT) 
     }
 
     private fun episode(e: Episode?): Any = e?.let {
-        JSONObject().put("s", it.season).put("e", it.number).put("code", it.code).put("date", it.airDate ?: JSONObject.NULL)
+        JSONObject().put("s", it.season).put("e", it.number).put("code", it.label).put("date", it.airDate ?: JSONObject.NULL)
     } ?: JSONObject.NULL
 
     private fun library(): JSONObject {

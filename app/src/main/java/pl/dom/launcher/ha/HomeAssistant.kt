@@ -166,6 +166,11 @@ class HomeAssistant(
                 throw e
             } catch (e: Throwable) {
                 _status.value = errorStatus(e)
+                when (val st = _status.value) {
+                    is HaStatus.Error -> pl.dom.launcher.util.ErrorLog.add("Home Assistant", st.message)
+                    is HaStatus.Untrusted -> pl.dom.launcher.util.ErrorLog.add("Home Assistant", "Niezaufany certyfikat")
+                    else -> Unit
+                }
             }
             delay(wait)
             wait = (wait * 2).coerceAtMost(60_000L)

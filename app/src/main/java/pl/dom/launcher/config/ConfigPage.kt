@@ -239,6 +239,15 @@ internal const val CONFIG_PAGE = """<!doctype html>
         </div>
       </div>
       <div class="card">
+        <h2>Ostatnie problemy</h2>
+        <p class="hint">Błędy zapisane przez launcher. Skopiuj i wklej w rozmowie, jeśli coś nie działa.</p>
+        <ul class="media" id="errors"></ul>
+        <div class="row">
+          <button type="button" class="small" id="copyErrors">Kopiuj</button>
+          <button type="button" class="small" id="clearErrors">Wyczyść</button>
+        </div>
+      </div>
+      <div class="card">
         <h2>O launcherze</h2>
         <p class="hint" id="about" style="margin:0"></p>
       </div>
@@ -320,6 +329,7 @@ internal const val CONFIG_PAGE = """<!doctype html>
     if (view === "overview") loadStatus();
     if (view === "home") loadHa();
     if (view === "watch") { loadLibrary(); loadProviders(); }
+    if (view === "more") loadErrors();
   }
   document.querySelectorAll("nav button").forEach(function (b) { b.onclick = function () { show(b.dataset.view); }; });
   document.addEventListener("click", function (e) {
@@ -522,7 +532,7 @@ internal const val CONFIG_PAGE = """<!doctype html>
   function showMeta(s) {
     var parts = [];
     if (s.provider) parts.push(s.provider);
-    if (s.unwatched > 0 && s.next) parts.push("dalej " + s.next.code + " (" + s.unwatched + " czeka)");
+    if (s.unwatched > 0 && s.next) parts.push("dalej: " + s.next.code + " (" + s.unwatched + " czeka)");
     else if (s.nextAir) parts.push("następny " + s.nextAir.code + (s.nextAir.date ? " – " + s.nextAir.date : ""));
     else if (s.ended) parts.push("zakończony");
     else parts.push("na bieżąco");
@@ -542,7 +552,7 @@ internal const val CONFIG_PAGE = """<!doctype html>
       r.acts.appendChild(ep);
       function saveEp() { libAction({ action: "watched", id: s.id, s: parseInt(se.value || "0", 10), e: parseInt(ep.value || "0", 10) }); }
       se.onchange = saveEp; ep.onchange = saveEp;
-      if (s.unwatched > 0 && s.next) r.acts.appendChild(btn("Obejrzany " + s.next.code, "small", function () { return libAction({ action: "next", id: s.id }); }));
+      if (s.unwatched > 0 && s.next) r.acts.appendChild(btn("Obejrzany: " + s.next.code, "small", function () { return libAction({ action: "next", id: s.id }); }));
       r.acts.appendChild(btn("Usuń", "small", function () {
         if (!confirm("Przestać obserwować „" + s.name + "”?")) return;
         return libAction({ action: "unfollow", id: s.id }, "Usunięto");
@@ -685,6 +695,43 @@ internal const val CONFIG_PAGE = """<!doctype html>
       .catch(fail)
       .then(function () { el("importFile").value = ""; });
   };
+
+  // ---------- problemy ----------
+  var errorsText = "";
+  function loadErrors() {
+    api("/api/errors").then(function (d) {
+      var ul = el("errors");
+      ul.textContent = "";
+      errorsText = "Dom " + d.version + "\n";
+      if (!d.entries.length) ul.appendChild(h("li", "empty", "Brak problemów ✓"));
+      d.entries.forEach(function (e) {
+        var li = h("li");
+        var info = h("div", "info");
+        info.appendChild(h("div", "title", e.source));
+        info.appendChild(h("div", "meta", e.at));
+        var msg = h("div", "meta", e.message);
+        msg.style.whiteSpace = "pre-wrap";
+        msg.style.wordBreak = "break-word";
+        info.appendChild(msg);
+        li.appendChild(info);
+        ul.appendChild(li);
+        errorsText += "\n[" + e.at + "] " + e.source + ": " + e.message;
+      });
+    }).catch(fail);
+  }
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    var ta = h("textarea");
+    ta.value = text;
+    ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (x) {}
+    ta.remove();
+    return Promise.resolve();
+  }
+  el("copyErrors").onclick = function () { copyText(errorsText).then(function () { toast("Skopiowano ✓"); }); };
+  el("clearErrors").onclick = function () { api("/api/errors/clear", {}).then(function () { toast("Wyczyszczono"); loadErrors(); }).catch(fail); };
 
   // ---------- start ----------
   function loadState() {

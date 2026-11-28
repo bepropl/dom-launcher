@@ -116,8 +116,8 @@ fun StartScreen(
         MediaRow("Nowe odcinki Waszych seriali", if (shows.isNotEmpty()) "${shows.size} do obejrzenia" else null) {
             items(shows, key = { "show-${it.tmdbId}" }) { show ->
                 WideMediaCard(
-                    title = show.name, subtitle = show.cardSubtitle(), imageUrl = TmdbImages.backdrop(show.backdropPath),
-                    onClick = { actions.openProvider(show.provider, show.name) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
+                    title = show.name, subtitle = show.cardSubtitle(), imageUrl = show.cardImage(),
+                    onClick = { actions.watchShow(show) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
                 )
             }

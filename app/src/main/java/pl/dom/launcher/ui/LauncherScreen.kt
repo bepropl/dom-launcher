@@ -250,6 +250,9 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
         if (anyFocus || menu != null || showNotifications || showPanel) return@LaunchedEffect
         delay(500)
         if (!anyFocus) {
+            // Otwarty podgląd tytułu: kursor wraca na „Oglądaj”, a nie na schowane menu.
+            val detail = DetailFocus.main
+            if (detailStack.isNotEmpty() && detail != null && runCatching { detail.requestFocus() }.isSuccess) return@LaunchedEffect
             val ok = runCatching { tabFocus[tab].requestFocus() }.isSuccess
             if (!ok) runCatching { gearFocus.requestFocus() }
         }
@@ -361,6 +364,23 @@ fun LauncherScreen(goHomeSignal: StateFlow<Int>) {
                     onOpen = { next -> detailStack = detailStack + next },
                     onClose = { detailStack = detailStack.dropLast(1) },
                     onTrailer = { key, title -> TrailerActivity.open(context, key, title) },
+                )
+            }
+        }
+
+        // „Obejrzeliście…?” po powrocie z serialu otwartego z Dom.
+        val askWatched by WatchPrompt.ask.collectAsStateWithLifecycle()
+        val lifecycleState by androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
+        LaunchedEffect(lifecycleState) {
+            if (lifecycleState == androidx.lifecycle.Lifecycle.State.RESUMED) WatchPrompt.onLauncherResumed()
+        }
+        askWatched?.let { p ->
+            if (!idle) {
+                WatchPromptCard(
+                    p,
+                    onYes = { actions.answerWatchPrompt(p, true) },
+                    onNo = { actions.answerWatchPrompt(p, false) },
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp),
                 )
             }
         }

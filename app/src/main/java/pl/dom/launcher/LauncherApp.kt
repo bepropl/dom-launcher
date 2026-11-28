@@ -32,6 +32,13 @@ class LauncherApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Awarie trafiają do dziennika problemów (widać go na stronie w telefonie).
+        pl.dom.launcher.util.ErrorLog.init(this)
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { pl.dom.launcher.util.ErrorLog.add("Awaria launchera", pl.dom.launcher.util.ErrorLog.crashText(error)) }
+            previous?.uncaughtException(thread, error)
+        }
         settings = SettingsRepository(this)
         secrets = SecretStore(this)
         apps = AppsRepository(this)

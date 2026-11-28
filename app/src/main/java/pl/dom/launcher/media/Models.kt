@@ -8,6 +8,28 @@ data class Episode(val season: Int, val number: Int, val airDate: String? = null
         if (season != other.season) season.compareTo(other.season) else number.compareTo(other.number)
 
     val code: String get() = "S%02dE%02d".format(season, number)
+
+    /** Po ludzku: „2. sezon, 5. odcinek”. */
+    val label: String get() = "$season. sezon, $number. odcinek"
+
+    /** Po „do”: „5. odcinka 2. sezonu”. */
+    val labelUpTo: String get() = "$number. odcinka $season. sezonu"
+
+    /** Krótko, gdy mało miejsca: „s. 2, odc. 5”. */
+    val short: String get() = "s. $season, odc. $number"
+}
+
+/** „1 odcinek”, „3 odcinki”, „5 odcinków”. */
+fun episodesLabel(n: Int): String = when {
+    n == 1 -> "1 odcinek"
+    n % 10 in 2..4 && n % 100 !in 12..14 -> "$n odcinki"
+    else -> "$n odcinków"
+}
+
+/** „ok. 2 h 40 min”, „ok. 45 min”. */
+fun durationLabel(minutes: Int): String {
+    val m = ((minutes + 4) / 5) * 5
+    return if (m >= 60) "ok. ${m / 60} h" + (if (m % 60 > 0) " ${m % 60} min" else "") else "ok. $m min"
 }
 
 /** Film albo serial z TMDB. */
@@ -49,6 +71,7 @@ object TmdbImages {
     /** Tło na cały ekran (podgląd tytułu). */
     fun backdropLarge(path: String?) = path?.let { "https://image.tmdb.org/t/p/w1280$it" }
     fun still(path: String?) = path?.let { "https://image.tmdb.org/t/p/w300$it" }
+    fun stillLarge(path: String?) = path?.let { "https://image.tmdb.org/t/p/w780$it" }
 }
 
 /** Wszystko do ekranu podglądu (jak w Netflixie). */

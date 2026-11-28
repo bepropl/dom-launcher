@@ -88,11 +88,48 @@ class MediaActions(
         if (!justOpenedMenu()) openDetail(DetailRequest(type, tmdbId))
     }
 
+    /** OK na karcie „Dalej”: otwiera serwis i zapamiętuje odcinek do pytania „Obejrzeliście…?”. */
+    fun watchShow(show: FollowedShow) {
+        if (justOpenedMenu()) return
+        show.nextToWatch?.let { WatchPrompt.started(show.tmdbId, show.name, it) }
+        launchProvider(show.provider, show.name)
+    }
+
     /** Przycisk „Oglądaj” w podglądzie: aplikacja serwisu, jeśli się da – od razu z wyszukanym tytułem. */
-    fun watch(provider: String?, title: String) {
+    fun watch(provider: String?, title: String, show: FollowedShow? = null) {
+        show?.let { s -> if (s.started && s.hasNewEpisode) s.nextToWatch?.let { WatchPrompt.started(s.tmdbId, s.name, it) } }
         val target = provider?.let { app.apps.findByName(it) }
         if (target != null && app.apps.launchSearch(target.packageName, title)) return
         launchProvider(provider, title)
+    }
+
+    /** Przycisk „Obserwuj…” / „Obserwujecie ✓” w podglądzie – opcje w małym menu. */
+    fun menuForFollow(tmdbId: Int, title: String, followed: Boolean) {
+        showMenu(
+            MenuRequest(
+                title,
+                if (followed) {
+                    listOf(MenuAction("Przestań obserwować") { unfollow(tmdbId, title) })
+                } else {
+                    listOf(
+                        MenuAction("Jesteśmy na bieżąco") { follow(tmdbId, title, caughtUp = true) },
+                        MenuAction("Oglądamy od początku") { follow(tmdbId, title, caughtUp = false) },
+                    )
+                },
+            ),
+        )
+    }
+
+    fun explainFollowedOnList(started: Boolean) {
+        toast(
+            if (started) "Obserwowany serial jest w „Dalej”, gdy wyjdzie nowy odcinek"
+            else "Niezaczęty obserwowany serial jest automatycznie na liście „Do obejrzenia”",
+        )
+    }
+
+    fun answerWatchPrompt(p: WatchPrompt.Pending, watched: Boolean) {
+        WatchPrompt.ask.value = null
+        if (watched) run("Zapisano: ${p.episode.label} obejrzany") { media.setWatched(p.tmdbId, p.episode.season, p.episode.number) }
     }
 
     fun follow(tmdbId: Int, title: String, caughtUp: Boolean) =
@@ -107,22 +144,22 @@ class MediaActions(
 
     /** OK na odcinku w podglądzie serialu. */
     fun menuForEpisode(d: MediaDetails, ep: SeasonEpisode) {
-        val code = Episode(ep.season, ep.number).code
+        val episode = Episode(ep.season, ep.number)
         val followed = media.library.state.value.isFollowed(d.item.tmdbId)
         showMenu(
             MenuRequest(
-                "${d.item.title} · $code ${ep.name}",
+                "${d.item.title} · ${episode.label}" + (if (ep.name.isNotBlank()) ": ${ep.name}" else ""),
                 buildList {
                     add(MenuAction(d.item.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { watch(d.item.provider, d.item.title) })
-                    add(MenuAction("Obejrzane do $code (włącznie)") {
-                        run("Zapisano: obejrzane do $code") {
+                    add(MenuAction("Obejrzane do ${episode.labelUpTo} włącznie") {
+                        run("Zapisano: obejrzane do ${episode.labelUpTo}") {
                             if (!followed) media.follow(d.item.tmdbId, caughtUp = false)
                             media.setWatched(d.item.tmdbId, ep.season, ep.number)
                         }
                     })
                     if (followed) {
                         val prev = if (ep.number > 1) Episode(ep.season, ep.number - 1) else null
-                        add(MenuAction(prev?.let { "Obejrzane do ${it.code} (bez tego odcinka)" } ?: "Ten sezon jeszcze nieobejrzany") {
+                        add(MenuAction(prev?.let { "Obejrzane do ${it.labelUpTo} (bez tego)" } ?: "Ten sezon jeszcze nieobejrzany") {
                             run("Zapisano") {
                                 if (prev != null) media.setWatched(d.item.tmdbId, prev.season, prev.number)
                                 else media.setWatched(d.item.tmdbId, ep.season - 1, if (ep.season > 1) d.seasons[ep.season - 1] ?: 0 else 0)
@@ -164,13 +201,13 @@ class MediaActions(
                 buildList {
                     add(MenuAction(show.provider?.let { "Oglądaj w $it" } ?: "Oglądaj") { launchProvider(show.provider, show.name) })
                     if (next != null && show.hasNewEpisode) {
-                        add(MenuAction("Oznacz ${next.code} jako obejrzany") {
-                            run("Oznaczono ${next.code} jako obejrzany") { media.markNextWatched(show.tmdbId) }
+                        add(MenuAction("Obejrzany: ${next.label}") {
+                            run("Zapisano: ${next.label} obejrzany") { media.markNextWatched(show.tmdbId) }
                         })
                     }
                     show.lastAired?.let { last ->
                         if (show.hasNewEpisode) {
-                            add(MenuAction("Jesteśmy na bieżąco (do ${last.code})") {
+                            add(MenuAction("Jesteśmy na bieżąco (do ${last.labelUpTo})") {
                                 run("Zapisano") { media.setWatched(show.tmdbId, last.season, last.number) }
                             })
                         }

@@ -62,6 +62,8 @@ import pl.dom.launcher.media.Library
 import pl.dom.launcher.media.MediaItem
 import pl.dom.launcher.media.MediaType
 import pl.dom.launcher.media.TmdbImages
+import pl.dom.launcher.media.episodesLabel
+import pl.dom.launcher.media.durationLabel
 import pl.dom.launcher.media.ToWatch
 
 /** Seriale z nowymi odcinkami – najświeższe na początku. */
@@ -74,19 +76,31 @@ fun Library.showsWaiting(): List<FollowedShow> =
     shows.filter { it.started && !it.hasNewEpisode && it.nextAir?.airDate != null }.sortedBy { it.nextAir?.airDate ?: "9999" }
 
 fun FollowedShow.cardSubtitle(): String {
-    val next = nextToWatch
-    val date = friendlyDate(newEpisodeDate)
-    return listOfNotNull(provider, next?.code, date).joinToString(" · ")
+    val next = nextToWatch ?: return provider.orEmpty()
+    // „s. 2, odc. 5 · Tytuł odcinka” albo z dostawcą, gdy tytułu nie znamy.
+    val title = nextName?.takeIf { nextInfoValid }
+    return listOfNotNull(next.short, title ?: provider, friendlyDate(newEpisodeDate)).joinToString(" · ")
 }
 
-fun FollowedShow.cardBadge(): String =
-    if (newEpisodeDate != null && unwatchedCount <= 1) "Nowy odcinek" else "$unwatchedCount do obejrzenia"
+/** Kadr następnego odcinka (gdy znany), inaczej tło serialu. */
+fun FollowedShow.cardImage(): String? =
+    (if (nextInfoValid) TmdbImages.stillLarge(nextStill) else null) ?: TmdbImages.backdrop(backdropPath)
+
+fun FollowedShow.cardBadge(): String {
+    val count = unwatchedCount
+    val time = catchUpMinutes?.takeIf { nextInfoValid }?.let { durationLabel(it) }
+    return when {
+        count <= 1 && newEpisodeDate != null -> "Nowy odcinek"
+        time != null -> "${episodesLabel(count)} · $time"
+        else -> "${episodesLabel(count)} do obejrzenia"
+    }
+}
 
 fun FollowedShow.waitingText(): String {
     val next = nextAir
     return when {
         next != null && next.number == 1 -> "nowy sezon · ${friendlyDate(next.airDate) ?: "data nieznana"}"
-        next != null -> "${next.code} · ${friendlyDate(next.airDate) ?: "data nieznana"}"
+        next != null -> "${next.short} · ${friendlyDate(next.airDate) ?: "data nieznana"}"
         ended -> "serial zakończony"
         else -> "data nieznana"
     }
@@ -124,8 +138,8 @@ fun WatchlistScreen(library: Library, feeds: Feeds, actions: MediaActions) {
         MediaRow("Dalej", "OK – oglądaj, przytrzymaj OK – szczegóły") {
             items(next, key = { "show-${it.tmdbId}" }) { show ->
                 WideMediaCard(
-                    title = show.name, subtitle = show.cardSubtitle(), imageUrl = TmdbImages.backdrop(show.backdropPath),
-                    onClick = { actions.openProvider(show.provider, show.name) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
+                    title = show.name, subtitle = show.cardSubtitle(), imageUrl = show.cardImage(),
+                    onClick = { actions.watchShow(show) }, onLongClick = { actions.detail(MediaType.TV, show.tmdbId) },
                     badge = show.cardBadge(),
                 )
             }

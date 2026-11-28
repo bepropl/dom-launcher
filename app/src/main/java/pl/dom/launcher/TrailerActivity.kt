@@ -111,6 +111,7 @@ class TrailerActivity : Activity() {
 
     private fun showError(code: Int) {
         if (errorShown) return
+        pl.dom.launcher.util.ErrorLog.add("Zwiastun", "Błąd odtwarzacza $code (film ${intent.getStringExtra(EXTRA_KEY)})")
         errorShown = true
         hint.visibility = View.GONE
         val key = intent.getStringExtra(EXTRA_KEY).orEmpty()

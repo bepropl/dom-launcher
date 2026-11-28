@@ -75,6 +75,7 @@ class MediaRepository(
             library.state.value.shows.forEach { show ->
                 runCatching { tmdb.tvDetails(show.tmdbId) }.onSuccess { d -> updateShowDetails(d) }
             }
+            library.state.value.shows.filter { it.started && it.hasNewEpisode }.forEach { runCatching { updateNextInfo(it.tmdbId) } }
         }
         lastShowsAt = System.currentTimeMillis()
     }
@@ -130,6 +131,7 @@ class MediaRepository(
         }
         lastRefreshAt = System.currentTimeMillis()
         lastShowsAt = lastRefreshAt
+        result.problems.forEach { pl.dom.launcher.util.ErrorLog.add("Seriale i filmy", it) }
         _feeds.value = result
     }
 
@@ -191,6 +193,7 @@ class MediaRepository(
                 backdropPath = details.backdropPath,
                 provider = provider,
                 watched = if (caughtUp) details.lastAired?.copy(airDate = null) ?: Episode(0, 0) else Episode(0, 0),
+                watchedAt = System.currentTimeMillis(),
                 seasons = details.seasons,
                 lastAired = details.lastAired,
                 nextAir = details.nextAir,
@@ -207,12 +210,48 @@ class MediaRepository(
     suspend fun unfollow(tmdbId: Int) = library.update { lib -> lib.copy(shows = lib.shows.filterNot { it.tmdbId == tmdbId }) }
 
     /** „Oznacz jako obejrzany” – przesuwa serial o jeden odcinek dalej. */
-    suspend fun markNextWatched(tmdbId: Int) = library.update { lib ->
-        lib.copy(shows = lib.shows.map { s -> if (s.tmdbId == tmdbId) s.nextToWatch?.let { s.copy(watched = it) } ?: s else s })
+    suspend fun markNextWatched(tmdbId: Int) {
+        val now = System.currentTimeMillis()
+        library.update { lib ->
+            lib.copy(shows = lib.shows.map { s -> if (s.tmdbId == tmdbId) s.nextToWatch?.let { s.copy(watched = it, watchedAt = now) } ?: s else s })
+        }
+        runCatching { updateNextInfo(tmdbId) }
     }
 
-    suspend fun setWatched(tmdbId: Int, season: Int, episode: Int) = library.update { lib ->
-        lib.copy(shows = lib.shows.map { s -> if (s.tmdbId == tmdbId) s.copy(watched = Episode(season.coerceAtLeast(0), episode.coerceAtLeast(0))) else s })
+    suspend fun setWatched(tmdbId: Int, season: Int, episode: Int) {
+        val now = System.currentTimeMillis()
+        library.update { lib ->
+            lib.copy(shows = lib.shows.map { s ->
+                if (s.tmdbId == tmdbId) s.copy(watched = Episode(season.coerceAtLeast(0), episode.coerceAtLeast(0)), watchedAt = now) else s
+            })
+        }
+        runCatching { updateNextInfo(tmdbId) }
+    }
+
+    /**
+     * Kadr i tytuł następnego odcinka oraz czas nadrobienia wszystkich wydanych odcinków
+     * (z list odcinków sezonów w TMDB; brak długości odcinka = 45 min).
+     */
+    private suspend fun updateNextInfo(tmdbId: Int) = withContext(Dispatchers.IO) {
+        val show = library.state.value.shows.firstOrNull { it.tmdbId == tmdbId } ?: return@withContext
+        val next = show.nextToWatch
+        val last = show.lastAired
+        if (next == null || last == null || !show.hasNewEpisode) {
+            library.update { lib -> lib.copy(shows = lib.shows.map { s -> if (s.tmdbId == tmdbId) s.copy(nextFor = null, catchUpMinutes = null) else s }) }
+            return@withContext
+        }
+        val seasons = (next.season..last.season).take(4)
+        val episodes = seasons.flatMap { n -> runCatching { tmdb.season(tmdbId, n) }.getOrDefault(emptyList()) }
+        val nextEp = episodes.firstOrNull { it.season == next.season && it.number == next.number }
+        val minutes = episodes
+            .filter { Episode(it.season, it.number) >= next && Episode(it.season, it.number) <= last }
+            .sumOf { it.runtime ?: 45 }
+        library.update { lib ->
+            lib.copy(shows = lib.shows.map { s ->
+                if (s.tmdbId != tmdbId) s
+                else s.copy(nextFor = next, nextName = nextEp?.name?.takeIf { it.isNotBlank() }, nextStill = nextEp?.stillPath, catchUpMinutes = minutes.takeIf { it > 0 })
+            })
+        }
     }
 
     suspend fun addToWatchlist(type: MediaType, tmdbId: Int) {

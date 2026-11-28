@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +50,10 @@ import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import pl.dom.launcher.LauncherApp
 import pl.dom.launcher.media.Episode
+import pl.dom.launcher.media.durationLabel
+import pl.dom.launcher.media.episodesLabel
+import pl.dom.launcher.media.FollowedShow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import pl.dom.launcher.media.Library
 import pl.dom.launcher.media.MediaDetails
 import pl.dom.launcher.media.MediaType
@@ -56,6 +61,11 @@ import pl.dom.launcher.media.SeasonEpisode
 import pl.dom.launcher.media.TmdbImages
 
 data class DetailRequest(val type: MediaType, val tmdbId: Int)
+
+/** Przycisk „Oglądaj” otwartego podglądu – tu wraca zgubiony kursor. */
+object DetailFocus {
+    var main: FocusRequester? = null
+}
 
 /**
  * Podgląd tytułu na cały ekran (jak w Netflixie): tło z kadru, opis, przyciski
@@ -110,6 +120,12 @@ fun DetailScreen(
         }
     }
 
+    // Zabezpieczenie kursora w launcherze wie, dokąd go wrócić, gdy podgląd jest otwarty.
+    DisposableEffect(mainButton) {
+        DetailFocus.main = mainButton
+        onDispose { if (DetailFocus.main === mainButton) DetailFocus.main = null }
+    }
+
     // Po wczytaniu kursor staje na „Oglądaj”.
     LaunchedEffect(details) {
         if (details?.getOrNull() != null) {
@@ -153,9 +169,11 @@ private fun DetailContent(
                 val next = show.nextToWatch
                 Text(
                     when {
-                        show.hasNewEpisode && next != null -> "Następny do obejrzenia: ${next.code} (${show.unwatchedCount} czeka)"
+                        show.hasNewEpisode && next != null -> "Następny: ${next.label}" +
+                            " · do nadrobienia ${episodesLabel(show.unwatchedCount)}" +
+                            (show.catchUpMinutes?.takeIf { show.nextInfoValid }?.let { ", " + durationLabel(it) } ?: "")
                         !show.started -> "Jeszcze nie zaczęte – jest na liście „Do obejrzenia”"
-                        else -> "Obejrzane do ${show.watched.code}"
+                        else -> "Obejrzane do ${show.watched.labelUpTo}"
                     },
                     fontSize = 10.sp, color = Palette.Amber,
                 )
@@ -163,22 +181,29 @@ private fun DetailContent(
         }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp, start = EdgePadding + 8.dp)) {
-            Button(onClick = { actions.watch(item.provider, item.title) }, modifier = Modifier.focusRequester(mainButton)) {
+            Button(onClick = { actions.watch(item.provider, item.title, followed) }, modifier = Modifier.focusRequester(mainButton)) {
                 Text(item.provider?.let { "▶  Oglądaj w $it" } ?: "▶  Oglądaj", fontSize = 11.sp)
             }
             if (d.trailerKey != null) OutlinedButton(onClick = onTrailer) { Text("Zwiastun", fontSize = 11.sp) }
+            // Przyciski zawsze w tym samym miejscu – zmienia się tylko napis, więc kursor nie ginie.
             if (item.type == MediaType.TV) {
-                if (followed != null) {
-                    OutlinedButton(onClick = { actions.unfollow(item.tmdbId, item.title) }) { Text("Przestań obserwować", fontSize = 11.sp) }
-                } else {
-                    OutlinedButton(onClick = { actions.follow(item.tmdbId, item.title, caughtUp = false) }) { Text("Obserwuj – od początku", fontSize = 11.sp) }
-                    OutlinedButton(onClick = { actions.follow(item.tmdbId, item.title, caughtUp = true) }) { Text("Obserwuj – na bieżąco", fontSize = 11.sp) }
+                OutlinedButton(onClick = { actions.menuForFollow(item.tmdbId, item.title, followed != null) }) {
+                    Text(if (followed != null) "Obserwujecie ✓" else "Obserwuj…", fontSize = 11.sp)
                 }
             }
-            if (followed == null) {
-                OutlinedButton(onClick = { actions.toggleWatchlist(item.type, item.tmdbId, item.title, onList) }) {
-                    Text(if (onList) "Usuń z „Do obejrzenia”" else "+ Do obejrzenia", fontSize = 11.sp)
-                }
+            OutlinedButton(onClick = {
+                if (followed != null) actions.explainFollowedOnList(followed.started)
+                else actions.toggleWatchlist(item.type, item.tmdbId, item.title, onList)
+            }) {
+                Text(
+                    when {
+                        followed != null && !followed.started -> "Na liście ✓"
+                        followed != null -> "W „Dalej”"
+                        onList -> "Na liście ✓"
+                        else -> "+ Do obejrzenia"
+                    },
+                    fontSize = 11.sp,
+                )
             }
         }
 
@@ -194,7 +219,7 @@ private fun DetailContent(
         }
 
         if (item.type == MediaType.TV && d.seasons.isNotEmpty()) {
-            Seasons(d, followed?.watched, actions)
+            Seasons(d, followed, actions)
         }
 
         if (d.recommendations.isNotEmpty()) {
@@ -213,13 +238,24 @@ private fun DetailContent(
 }
 
 @Composable
-private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
+private fun Seasons(d: MediaDetails, followed: FollowedShow?, actions: MediaActions) {
     val app = LauncherApp.from(androidx.compose.ui.platform.LocalContext.current)
     val numbers = d.seasons.keys.sorted()
-    // Domyślnie sezon, w którym jesteście (albo pierwszy).
-    var season by remember(d.item.tmdbId) {
-        mutableIntStateOf(watched?.let { w -> if (w.season in numbers) w.season else null } ?: numbers.first())
+    val watched = followed?.watched
+    val next = followed?.nextToWatch
+    // „Nowy” = wydany po tym, jak ostatnio coś oznaczyliście jako obejrzane.
+    val watchedDay = followed?.watchedAt?.takeIf { it > 0 }?.let {
+        java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
     }
+    // Domyślnie sezon z następnym odcinkiem do obejrzenia (albo ten, w którym jesteście, albo pierwszy).
+    var season by remember(d.item.tmdbId) {
+        mutableIntStateOf(
+            next?.season?.takeIf { it in numbers }
+                ?: watched?.season?.takeIf { it in numbers }
+                ?: numbers.first(),
+        )
+    }
+    val episodesState = rememberLazyListState()
     // Poprzednia lista zostaje widoczna, dopóki nie wczyta się nowy sezon.
     val episodes by produceState<List<SeasonEpisode>?>(null, d.item.tmdbId, season) {
         value = runCatching { app.media.season(d.item.tmdbId, season) }.getOrDefault(emptyList())
@@ -251,13 +287,24 @@ private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
             }
         }
         val list = episodes
+        // Po wczytaniu sezonu lista ustawia się na pierwszym nieobejrzanym odcinku.
+        LaunchedEffect(list) {
+            val l = list ?: return@LaunchedEffect
+            val first = l.indexOfFirst { watched == null || Episode(it.season, it.number) > watched }
+            if (first > 0) runCatching { episodesState.scrollToItem(first) }
+        }
         when {
             list == null -> Text("Wczytuję odcinki…", fontSize = 10.sp, color = Palette.Muted, modifier = Modifier.padding(start = EdgePadding + 4.dp))
             list.isEmpty() -> Text("Brak listy odcinków.", fontSize = 10.sp, color = Palette.Muted, modifier = Modifier.padding(start = EdgePadding + 4.dp))
-            else -> LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(horizontal = EdgePadding + 4.dp, vertical = 6.dp)) {
+            else -> LazyRow(
+                state = episodesState,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = EdgePadding + 4.dp, vertical = 6.dp),
+            ) {
                 items(list, key = { "ep-${it.season}-${it.number}" }) { ep ->
                     val seen = watched != null && Episode(ep.season, ep.number) <= watched
                     val aired = ep.airDate?.let { it <= java.time.LocalDate.now().toString() } ?: false
+                    val isNew = !seen && aired && watchedDay != null && ep.airDate != null && ep.airDate > watchedDay
                     WideMediaCard(
                         title = "${ep.number}. ${ep.name}",
                         subtitle = listOfNotNull(
@@ -268,10 +315,11 @@ private fun Seasons(d: MediaDetails, watched: Episode?, actions: MediaActions) {
                         onClick = { actions.menuForEpisode(d, ep) },
                         badge = when {
                             seen -> "Obejrzany ✓"
+                            isNew -> "Nowy"
                             !aired -> "Wkrótce"
                             else -> null
                         },
-                        badgeStrong = !seen && aired,
+                        badgeStrong = isNew,
                         width = 190.dp,
                         height = 107.dp,
                     )
